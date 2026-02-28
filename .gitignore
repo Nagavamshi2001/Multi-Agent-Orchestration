@@ -5,10 +5,19 @@ node_modules/
 .env
 .env.local
 .env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
 
-# Build outputs
+# Build outputs / generated data
 dist/
 build/
+backend/dist/
+backend/build/
+backend/data/
+data/
+backend/data/app.sqlite
+data/app.sqlite
 
 # Vite
 frontend/dist/
