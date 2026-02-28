@@ -1,0 +1,27 @@
+{
+  "name": "multi-agent-email-orchestrator-backend",
+  "version": "1.0.0",
+  "description": "Multi-level agent orchestrator with Email Assistant sub-agent using OpenAI Agents SDK",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@openai/agents": "^0.0.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "duck-duck-scrape": "^2.2.7",
+    "express": "^4.21.2",
+    "gnews": "^1.0.3",
+    "googleapis": "^144.0.0",
+    "nodemailer": "^6.9.16",
+    "openai": "^4.85.4",
+    "ws": "^8.18.0",
+    "zod": "^3.24.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
