@@ -1,37 +1,8 @@
-import { google } from 'googleapis';
-import dotenv from 'dotenv';
+import { getTasksClient, isTasksConfigured } from '../utils/googleAuth.js';
+import { toolSuccess, toolError, toolEmpty } from '../utils/toolResponse.js';
+import { safeTitle, clampMaxResults } from '../utils/helpers.js';
 
-dotenv.config();
-
-// ─── Google Tasks OAuth2 Client ───────────────────────────────────────────────
-// Uses same OAuth2 credentials; ensure refresh token includes Tasks scope:
-// https://www.googleapis.com/auth/tasks
-const createOAuth2Client = () => {
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GMAIL_CLIENT_ID,
-    process.env.GMAIL_CLIENT_SECRET,
-    'https://developers.google.com/oauthplayground'
-  );
-  oauth2Client.setCredentials({
-    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
-  });
-  return oauth2Client;
-};
-
-const getTasksClient = () => {
-  const auth = createOAuth2Client();
-  return google.tasks({ version: 'v1', auth });
-};
-
-// ─── Check if credentials are configured ──────────────────────────────────────
-export const isTasksConfigured = () => {
-  return !!(
-    process.env.GMAIL_CLIENT_ID &&
-    process.env.GMAIL_CLIENT_SECRET &&
-    process.env.GMAIL_REFRESH_TOKEN &&
-    process.env.GMAIL_CLIENT_ID !== 'your-client-id.apps.googleusercontent.com'
-  );
-};
+export { isTasksConfigured };
 
 // ─── Helper: Get default task list ID (first list) ─────────────────────────────
 const getDefaultTaskListId = async () => {
@@ -44,10 +15,10 @@ const getDefaultTaskListId = async () => {
 // ─── Tool: List Task Lists ─────────────────────────────────────────────────────
 export const listTaskLists = async () => {
   if (!isTasksConfigured()) {
-    return JSON.stringify({
-      error: 'Tasks credentials not configured. Add Tasks scope to OAuth (https://www.googleapis.com/auth/tasks)',
-      setup: 'Re-authorize in OAuth Playground with tasks scope and update GMAIL_REFRESH_TOKEN',
-    });
+    return toolError(
+      'Tasks credentials not configured. Add Tasks scope to OAuth (https://www.googleapis.com/auth/tasks)',
+      { setup: 'Re-authorize in OAuth Playground with tasks scope and update GMAIL_REFRESH_TOKEN' }
+    );
   }
 
   try {
@@ -56,27 +27,25 @@ export const listTaskLists = async () => {
     const lists = res.data.items || [];
 
     if (lists.length === 0) {
-      return JSON.stringify({ count: 0, taskLists: [], message: 'No task lists found.' });
+      return toolEmpty('No task lists found.', { taskLists: [] });
     }
 
     const formatted = lists.map((l) => ({
       id: l.id,
-      title: l.title || '(No title)',
+      title: safeTitle(l.title),
     }));
 
-    return JSON.stringify({ count: formatted.length, taskLists: formatted });
+    return toolSuccess({ count: formatted.length, taskLists: formatted });
   } catch (err) {
     console.error('[listTaskLists] Error:', err.message);
-    return JSON.stringify({ error: `Failed to list task lists: ${err.message}` });
+    return toolError(`Failed to list task lists: ${err.message}`);
   }
 };
 
 // ─── Tool: List Tasks ──────────────────────────────────────────────────────────
 export const listTasks = async ({ taskListId, showCompleted = false, maxResults = 20 }) => {
   if (!isTasksConfigured()) {
-    return JSON.stringify({
-      error: 'Tasks credentials not configured.',
-    });
+    return toolError('Tasks credentials not configured.');
   }
 
   try {
@@ -84,37 +53,35 @@ export const listTasks = async ({ taskListId, showCompleted = false, maxResults 
     const listId = taskListId || (await getDefaultTaskListId());
 
     if (!listId) {
-      return JSON.stringify({ error: 'No task lists found. Create a task list first in Google Tasks.' });
+      return toolError('No task lists found. Create a task list first in Google Tasks.');
     }
 
     const res = await tasks.tasks.list({
       tasklist: listId,
       showCompleted: !!showCompleted,
       showHidden: false,
-      maxResults: Math.min(maxResults, 100),
+      maxResults: clampMaxResults(maxResults, 100),
     });
 
     const items = res.data.items || [];
     if (items.length === 0) {
-      return JSON.stringify({
-        count: 0,
+      return toolEmpty(showCompleted ? 'No tasks found.' : 'No incomplete tasks found.', {
         tasks: [],
-        message: showCompleted ? 'No tasks found.' : 'No incomplete tasks found.',
       });
     }
 
     const formatted = items.map((t) => ({
       id: t.id,
-      title: t.title || '(No title)',
+      title: safeTitle(t.title),
       status: t.status || 'needsAction',
       due: t.due || null,
       notes: t.notes ? t.notes.substring(0, 150) : null,
     }));
 
-    return JSON.stringify({ count: formatted.length, tasks: formatted });
+    return toolSuccess({ count: formatted.length, tasks: formatted });
   } catch (err) {
     console.error('[listTasks] Error:', err.message);
-    return JSON.stringify({ error: `Failed to list tasks: ${err.message}` });
+    return toolError(`Failed to list tasks: ${err.message}`);
   }
 };
 
@@ -126,11 +93,11 @@ export const createTask = async ({
   taskListId,
 }) => {
   if (!isTasksConfigured()) {
-    return JSON.stringify({ error: 'Tasks credentials not configured.' });
+    return toolError('Tasks credentials not configured.');
   }
 
   if (!title || !title.trim()) {
-    return JSON.stringify({ error: 'title is required.' });
+    return toolError('title is required.');
   }
 
   try {
@@ -138,7 +105,7 @@ export const createTask = async ({
     const listId = taskListId || (await getDefaultTaskListId());
 
     if (!listId) {
-      return JSON.stringify({ error: 'No task lists found. Create a task list first.' });
+      return toolError('No task lists found. Create a task list first.');
     }
 
     const body = {
@@ -152,14 +119,14 @@ export const createTask = async ({
       requestBody: body,
     });
 
-    return JSON.stringify({
+    return toolSuccess({
       success: true,
       message: `Task "${title.trim()}" created successfully.`,
       taskId: res.data.id,
     });
   } catch (err) {
     console.error('[createTask] Error:', err.message);
-    return JSON.stringify({ error: `Failed to create task: ${err.message}` });
+    return toolError(`Failed to create task: ${err.message}`);
   }
 };
 
@@ -200,11 +167,11 @@ export const completeTask = async ({ taskId, taskListId }) => {
 // ─── Tool: Delete Task ─────────────────────────────────────────────────────────
 export const deleteTask = async ({ taskId, taskListId }) => {
   if (!isTasksConfigured()) {
-    return JSON.stringify({ error: 'Tasks credentials not configured.' });
+    return toolError('Tasks credentials not configured.');
   }
 
   if (!taskId) {
-    return JSON.stringify({ error: 'taskId is required.' });
+    return toolError('taskId is required.');
   }
 
   try {
@@ -212,7 +179,7 @@ export const deleteTask = async ({ taskId, taskListId }) => {
     const listId = taskListId || (await getDefaultTaskListId());
 
     if (!listId) {
-      return JSON.stringify({ error: 'No task lists found.' });
+      return toolError('No task lists found.');
     }
 
     await tasks.tasks.delete({
@@ -220,12 +187,12 @@ export const deleteTask = async ({ taskId, taskListId }) => {
       task: taskId,
     });
 
-    return JSON.stringify({
+    return toolSuccess({
       success: true,
       message: `Task deleted successfully.`,
     });
   } catch (err) {
     console.error('[deleteTask] Error:', err.message);
-    return JSON.stringify({ error: `Failed to delete task: ${err.message}` });
+    return toolError(`Failed to delete task: ${err.message}`);
   }
 };

@@ -5,9 +5,11 @@ import { createServer } from 'http';
 import { run } from '@openai/agents';
 import dotenv from 'dotenv';
 import orchestratorAgent from './agents/orchestrator.js';
-import { isEmailConfigured } from './tools/emailTools.js';
-import { isCalendarConfigured } from './tools/calendarTools.js';
-import { isTasksConfigured } from './tools/tasksTools.js';
+import {
+  isEmailConfigured,
+  isCalendarConfigured,
+  isTasksConfigured,
+} from './utils/googleAuth.js';
 
 dotenv.config();
 

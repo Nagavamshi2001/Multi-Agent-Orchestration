@@ -1,70 +1,51 @@
 import news from 'gnews';
-
-// ─── Google News Tools (no API key required) ───────────────────────────────────
-// Uses gnews package to fetch from Google News RSS
+import { toolSuccess, toolError, toolEmpty } from '../utils/toolResponse.js';
+import { clampMaxResults, formatNewsArticle } from '../utils/helpers.js';
 
 const TOPICS = ['WORLD', 'BUSINESS', 'TECHNOLOGY', 'SCIENCE', 'ENTERTAINMENT', 'SPORTS', 'HEALTH'];
 
-// ─── Tool: Get Top Headlines ───────────────────────────────────────────────────
 export const getHeadlines = async ({ maxResults = 10, country = 'us', language = 'en' }) => {
   try {
     const articles = await news.headlines({
       country: country.toLowerCase(),
       language: language.toLowerCase(),
-      n: Math.min(maxResults, 20),
+      n: clampMaxResults(maxResults, 20),
     });
 
     if (!articles || articles.length === 0) {
-      return JSON.stringify({ count: 0, articles: [], message: 'No headlines found.' });
+      return toolEmpty('No headlines found.', { articles: [] });
     }
 
-    const formatted = articles.map((a) => ({
-      title: a.title || '(No title)',
-      link: a.link || null,
-      pubDate: a.pubDate || null,
-      source: a.source?.title || a.source || null,
-    }));
-
-    return JSON.stringify({ count: formatted.length, articles: formatted });
+    const formatted = articles.map(formatNewsArticle);
+    return toolSuccess({ count: formatted.length, articles: formatted });
   } catch (err) {
     console.error('[getHeadlines] Error:', err.message);
-    return JSON.stringify({ error: `Failed to fetch headlines: ${err.message}` });
+    return toolError(`Failed to fetch headlines: ${err.message}`);
   }
 };
 
-// ─── Tool: Search News ────────────────────────────────────────────────────────
 export const searchNews = async ({ query, maxResults = 10, country = 'us', language = 'en' }) => {
   if (!query || !query.trim()) {
-    return JSON.stringify({ error: 'Search query is required.' });
+    return toolError('Search query is required.');
   }
 
   try {
-    const articles = await news.search(query.trim(), {
+    const q = query.trim();
+    const articles = await news.search(q, {
       country: country.toLowerCase(),
       language: language.toLowerCase(),
-      n: Math.min(maxResults, 20),
+      n: clampMaxResults(maxResults, 20),
     });
 
     if (!articles || articles.length === 0) {
-      return JSON.stringify({
-        count: 0,
-        articles: [],
-        query: query.trim(),
-        message: `No articles found for "${query.trim()}".`,
-      });
+      return toolEmpty(`No articles found for "${q}".`, { articles: [], query: q });
     }
 
-    const formatted = articles.map((a) => ({
-      title: a.title || '(No title)',
-      link: a.link || null,
-      pubDate: a.pubDate || null,
-      source: a.source?.title || a.source || null,
-    }));
-
-    return JSON.stringify({ count: formatted.length, query: query.trim(), articles: formatted });
+    const formatted = articles.map(formatNewsArticle);
+    return toolSuccess({ count: formatted.length, query: q, articles: formatted });
   } catch (err) {
     console.error('[searchNews] Error:', err.message);
-    return JSON.stringify({ error: `Failed to search news: ${err.message}` });
+    return toolError(`Failed to search news: ${err.message}`);
   }
 };
 
@@ -107,7 +88,6 @@ export const getNewsByTopic = async ({
   }
 };
 
-// ─── Tool: Get News by Location ────────────────────────────────────────────────
 export const getNewsByLocation = async ({
   location,
   maxResults = 10,
@@ -115,39 +95,29 @@ export const getNewsByLocation = async ({
   language = 'en',
 }) => {
   if (!location || !location.trim()) {
-    return JSON.stringify({ error: 'Location is required (e.g., "New York", "London").' });
+    return toolError('Location is required (e.g., "New York", "London").');
   }
 
   try {
-    const articles = await news.geo(location.trim(), {
+    const loc = location.trim();
+    const articles = await news.geo(loc, {
       country: country.toLowerCase(),
       language: language.toLowerCase(),
-      n: Math.min(maxResults, 20),
+      n: clampMaxResults(maxResults, 20),
     });
 
     if (!articles || articles.length === 0) {
-      return JSON.stringify({
-        count: 0,
-        articles: [],
-        location: location.trim(),
-        message: `No articles found for "${location.trim()}".`,
-      });
+      return toolEmpty(`No articles found for "${loc}".`, { articles: [], location: loc });
     }
 
-    const formatted = articles.map((a) => ({
-      title: a.title || '(No title)',
-      link: a.link || null,
-      pubDate: a.pubDate || null,
-      source: a.source?.title || a.source || null,
-    }));
-
-    return JSON.stringify({
+    const formatted = articles.map(formatNewsArticle);
+    return toolSuccess({
       count: formatted.length,
-      location: location.trim(),
+      location: loc,
       articles: formatted,
     });
   } catch (err) {
     console.error('[getNewsByLocation] Error:', err.message);
-    return JSON.stringify({ error: `Failed to fetch news: ${err.message}` });
+    return toolError(`Failed to fetch news: ${err.message}`);
   }
 };
