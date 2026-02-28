@@ -1,6 +1,29 @@
 import { google } from 'googleapis';
+import { getContext } from '../auth/requestContext.js';
 
-const REDIRECT_URI = 'https://developers.google.com/oauthplayground';
+const PLAYGROUND_REDIRECT_URI = 'https://developers.google.com/oauthplayground';
+const bool = (v) => ['1', 'true', 'yes', 'on'].includes(String(v || '').toLowerCase());
+
+const isDeveloperMode = () => {
+  const ctx = getContext?.() || {};
+  if (typeof ctx.developerMode === 'boolean') return ctx.developerMode;
+  return bool(process.env.DEVELOPER_MODE);
+};
+
+const getClientId = () => process.env.GMAIL_CLIENT_ID;
+const getClientSecret = () => process.env.GMAIL_CLIENT_SECRET;
+
+export const getGoogleRefreshToken = () => {
+  const dev = isDeveloperMode();
+  const ctx = getContext?.() || {};
+  return dev ? process.env.GMAIL_REFRESH_TOKEN : ctx.googleRefreshToken;
+};
+
+export const getGoogleUserEmail = () => {
+  const dev = isDeveloperMode();
+  const ctx = getContext?.() || {};
+  return dev ? process.env.GMAIL_USER_EMAIL : ctx.googleUserEmail;
+};
 
 /**
  * Create OAuth2 client (shared by Gmail, Calendar, Tasks).
@@ -8,13 +31,15 @@ const REDIRECT_URI = 'https://developers.google.com/oauthplayground';
  */
 export const createOAuth2Client = () => {
   const oauth2Client = new google.auth.OAuth2(
-    process.env.GMAIL_CLIENT_ID,
-    process.env.GMAIL_CLIENT_SECRET,
-    REDIRECT_URI
+    getClientId(),
+    getClientSecret(),
+    PLAYGROUND_REDIRECT_URI
   );
-  oauth2Client.setCredentials({
-    refresh_token: process.env.GMAIL_REFRESH_TOKEN,
-  });
+
+  const refreshToken = getGoogleRefreshToken();
+  if (refreshToken) {
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+  }
   return oauth2Client;
 };
 
@@ -25,14 +50,17 @@ export const createOAuth2Client = () => {
  * @returns {boolean}
  */
 export const isGoogleConfigured = ({ requireUserEmail = false } = {}) => {
-  const hasCredentials =
-    process.env.GMAIL_CLIENT_ID &&
-    process.env.GMAIL_CLIENT_SECRET &&
-    process.env.GMAIL_REFRESH_TOKEN &&
-    process.env.GMAIL_CLIENT_ID !== 'your-client-id.apps.googleusercontent.com';
-  if (!hasCredentials) return false;
+  const hasClient =
+    getClientId() &&
+    getClientSecret() &&
+    getClientId() !== 'your-client-id.apps.googleusercontent.com';
+  if (!hasClient) return false;
+
+  const refreshToken = getGoogleRefreshToken();
+  if (!refreshToken) return false;
+
   if (requireUserEmail) {
-    return !!process.env.GMAIL_USER_EMAIL;
+    return !!getGoogleUserEmail();
   }
   return true;
 };

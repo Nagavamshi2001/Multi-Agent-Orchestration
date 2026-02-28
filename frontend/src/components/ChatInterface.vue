@@ -12,15 +12,23 @@
         </div>
       </div>
       <div class="header-right">
+        <!-- Auth -->
+        <button
+          v-if="!me"
+          class="btn-login"
+          @click="loginWithGoogle"
+          title="Sign in with Google"
+        >
+          Login
+        </button>
+        <div v-else class="user-pill" title="Signed in">
+          <span class="user-email">{{ me.email }}</span>
+          <button class="btn-logout" @click="doLogout" title="Logout">Logout</button>
+        </div>
         <!-- Status indicator -->
         <div class="status-pill" :class="statusClass">
           <span class="status-dot"></span>
           <span class="status-text">{{ statusLabel }}</span>
-        </div>
-        <!-- Active agents display -->
-        <div class="agents-info">
-          <span class="agent-chip" title="Orchestrator">🤖 Orchestrator</span>
-          <span class="agent-chip email" title="Email Assistant">📧 Email</span>
         </div>
         <!-- Clear button -->
         <button class="btn-clear" @click="clearChat" title="Clear conversation">
@@ -94,6 +102,24 @@
       <p class="input-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</p>
     </footer>
 
+    <!-- Login modal -->
+    <div v-if="showLoginModal" class="login-modal-backdrop">
+      <div class="login-modal">
+        <h2 class="login-modal-title">Sign in to continue</h2>
+        <p class="login-modal-text">
+          To get the most out of AI Agent Hub (like email and calendar tools), please sign in with your Google account.
+        </p>
+        <div class="login-modal-actions">
+          <button class="login-modal-primary" @click="loginWithGoogle">
+            Continue with Google
+          </button>
+          <button class="login-modal-secondary" @click="showLoginModal = false">
+            Maybe later
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Error toast -->
     <Transition name="toast">
       <div v-if="error" class="error-toast">
@@ -106,9 +132,9 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue';
+import { ref, nextTick, onMounted, watch } from 'vue';
 import MessageBubble from './MessageBubble.vue';
-import { sendMessage as apiSendMessage, checkHealth, clearSession } from '../services/api.js';
+import { checkHealth, clearSession, getMe, logout as apiLogout, API_BASE } from '../services/api.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const messages = ref([]);
@@ -117,9 +143,15 @@ const isLoading = ref(false);
 const error = ref(null);
 const messagesEnd = ref(null);
 const inputRef = ref(null);
-const sessionId = ref(`session_${Date.now()}`);
+const sessionId = ref(localStorage.getItem('sk_session_id') || `session_${Date.now()}`);
 const backendStatus = ref('checking'); // 'ok' | 'error' | 'checking'
 const socket = ref(null);
+const me = ref(null);
+const showLoginModal = ref(false);
+
+watch(sessionId, (v) => {
+  localStorage.setItem('sk_session_id', v);
+});
 
 // ─── Quick suggestions (one per agent) ─────────────────────────────────────────
 const suggestions = [
@@ -194,6 +226,23 @@ const connectWebSocket = () => {
         // Auto-reconnect after 3 seconds
         setTimeout(connectWebSocket, 3000);
     };
+};
+
+// ─── Auth actions ─────────────────────────────────────────────────────────────
+const loginWithGoogle = () => {
+  const returnTo = window.location.href;
+  window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(returnTo)}`;
+};
+
+const doLogout = async () => {
+  try {
+    await apiLogout();
+  } catch (_) {
+    // ignore
+  }
+  me.value = null;
+  clearChat();
+  showLoginModal.value = true;
 };
 
 // ─── Helper: scroll to bottom ────────────────────────────────────────────────
@@ -281,6 +330,15 @@ onMounted(async () => {
     statusClass.value = 'error';
     statusLabel.value = 'Backend offline';
     backendStatus.value = 'error';
+  }
+  try {
+    const res = await getMe();
+    me.value = res.user;
+  } catch {
+    me.value = null;
+  }
+  if (!me.value) {
+    showLoginModal.value = true;
   }
   inputRef.value?.focus();
 });
@@ -439,6 +497,50 @@ onMounted(async () => {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.35);
 }
+
+.btn-login {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-login:hover {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.user-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--color-border);
+  background: rgba(15, 23, 42, 0.35);
+}
+.user-email {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-logout {
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.btn-logout:hover { opacity: 1; }
 
 /* ─── Messages Area ─────────────────────────────────────────────────────────── */
 .messages-area {
@@ -679,4 +781,78 @@ onMounted(async () => {
 .toast-leave-active { transition: all 0.3s ease; }
 .toast-enter-from,
 .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(20px); }
+
+/* ─── Login Modal ─────────────────────────────────────────────────────────────── */
+.login-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.login-modal {
+  width: 100%;
+  max-width: 360px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  padding: 20px 22px 18px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--color-border);
+}
+
+.login-modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--color-text);
+}
+
+.login-modal-text {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
+}
+
+.login-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.login-modal-primary {
+  padding: 7px 14px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px var(--color-primary-glow);
+  transition: var(--transition);
+}
+.login-modal-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px var(--color-primary-glow);
+}
+
+.login-modal-secondary {
+  padding: 7px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.login-modal-secondary:hover {
+  background: rgba(148, 163, 184, 0.08);
+}
 </style>

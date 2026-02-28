@@ -4,22 +4,65 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { run } from '@openai/agents';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import orchestratorAgent from './agents/orchestrator.js';
 import {
   isEmailConfigured,
   isCalendarConfigured,
   isTasksConfigured,
 } from './utils/googleAuth.js';
+import { initDb, cleanupExpiredSessions, getUserBySessionId, getGoogleTokensByUserId } from './db/db.js';
+import { attachUser, parseCookies, SESSION_COOKIE } from './auth/session.js';
+import { googleAuthRouter } from './auth/googleRoutes.js';
+import { runWithContext } from './auth/requestContext.js';
+import { decryptSecret } from './utils/tokenCrypto.js';
 
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const developerMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.DEVELOPER_MODE || '').toLowerCase());
+
+const resolveGoogleContext = async ({ userId, userEmail }) => {
+  if (developerMode) {
+    return {
+      googleRefreshToken: process.env.GMAIL_REFRESH_TOKEN || null,
+      googleUserEmail: process.env.GMAIL_USER_EMAIL || null,
+    };
+  }
+  if (!userId) return { googleRefreshToken: null, googleUserEmail: null };
+  const tokens = await getGoogleTokensByUserId(userId);
+  const refreshEnc = tokens?.refresh_token_enc;
+  return {
+    googleRefreshToken: refreshEnc ? decryptSecret(refreshEnc) : null,
+    googleUserEmail: userEmail || null,
+  };
+};
+
+// Initialize local DB (sql.js)
+await initDb();
+// best-effort cleanup (non-blocking)
+cleanupExpiredSessions().catch(() => {});
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: '*' }));
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (origin === FRONTEND_URL) return cb(null, true);
+      return cb(new Error('CORS blocked'), false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+app.use(attachUser);
+
+// ─── Auth Routes ──────────────────────────────────────────────────────────────
+app.use('/api/auth', googleAuthRouter());
 
 // ─── Conversation History Store ───────────────────────────────────────────────
 // In-memory store keyed by sessionId (replace with DB for production)
@@ -83,8 +126,12 @@ app.post('/api/chat', async (req, res) => {
         // Format history into SDK-compatible content-part arrays
         const agentInput = formatHistory(history);
 
-        // Run the orchestrator — it will handoff to sub-agents as needed
-        const result = await run(orchestratorAgent, agentInput);
+        const googleCtx = await resolveGoogleContext({ userId: req.user?.id || null, userEmail: req.user?.email });
+        // Run under request context so Google tools can pick correct user tokens
+        const result = await runWithContext(
+          { userId: req.user?.id || null, developerMode, ...googleCtx },
+          async () => await run(orchestratorAgent, agentInput)
+        );
 
         const assistantReply = result.finalOutput || 'I could not generate a response. Please try again.';
 
@@ -115,9 +162,23 @@ app.delete('/api/chat/:sessionId', (req, res) => {
 // ─── WebSocket: Streaming Chat ────────────────────────────────────────────────
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws) => {
+wss.on('connection', async (ws, req) => {
     const sessionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     console.log(`[WebSocket] New connection: ${sessionId}`);
+
+    // Resolve user once on connection (cookie sent during WS upgrade)
+    let wsUser = null;
+    let wsUserId = null;
+    try {
+      const cookies = parseCookies(req?.headers?.cookie);
+      const sid = cookies[SESSION_COOKIE];
+      if (sid) {
+        wsUser = await getUserBySessionId(sid);
+        wsUserId = wsUser?.id || null;
+      }
+    } catch {
+      wsUserId = null;
+    }
 
     ws.on('message', async (data) => {
         let payload;
@@ -148,7 +209,11 @@ wss.on('connection', (ws) => {
             const agentInput = formatHistory(history);
 
             // Use streaming mode to capture intermediate events (traces/thoughts)
-            const result = await run(orchestratorAgent, agentInput, { stream: true });
+            const googleCtx = await resolveGoogleContext({ userId: wsUserId, userEmail: wsUser?.email });
+            const result = await runWithContext(
+              { userId: wsUserId, developerMode, ...googleCtx },
+              async () => await run(orchestratorAgent, agentInput, { stream: true })
+            );
 
             let lastAgentName = orchestratorAgent.name;
 
@@ -165,6 +230,9 @@ wss.on('connection', (ws) => {
                     'create_calendar_event': 'Creating calendar event...',
                     'delete_calendar_event': 'Deleting calendar event...',
                     'search_calendar_events': 'Searching your calendar...',
+                    'get_calendar_event': 'Fetching event details...',
+                    'update_calendar_event': 'Updating calendar event...',
+                    'list_calendars': 'Listing your calendars...',
                     'delegate_to_calendar_assistant': 'Consulting the Calendar Assistant...',
                     'list_task_lists': 'Fetching your task lists...',
                     'list_tasks': 'Fetching your tasks...',

@@ -108,7 +108,7 @@ Guidelines:
       description: 'Get full details of a single calendar event by its ID.',
       parameters: z.object({
         eventId: z.string().describe('The event ID (from list or search results)'),
-        calendarId: z.string().optional().describe('Calendar ID. Default: primary.'),
+        calendarId: z.string().describe('Calendar ID. Use "primary" for default calendar.'),
       }),
       execute: async (params) => {
         console.log('[CalendarAgent] Getting event:', params.eventId);
@@ -121,25 +121,27 @@ Guidelines:
 
     tool({
       name: 'update_calendar_event',
-      description: 'Update an existing calendar event. Only provide fields to change; omit or use empty string to skip.',
+      description: 'Update an existing calendar event. Use empty string "" to skip a field; use "__CLEAR__" for description/location to clear it.',
       parameters: z.object({
         eventId: z.string().describe('The event ID to update'),
-        summary: z.string().optional().describe('New event title.'),
-        startDateTime: z.string().optional().describe('New start time (ISO 8601).'),
-        endDateTime: z.string().optional().describe('New end time (ISO 8601).'),
-        description: z.string().optional().describe('New description.'),
-        location: z.string().optional().describe('New location.'),
-        calendarId: z.string().optional().describe('Calendar ID. Default: primary.'),
+        summary: z.string().describe('New event title. Use empty string "" to skip.'),
+        startDateTime: z.string().describe('New start time (ISO 8601). Use empty string "" to skip.'),
+        endDateTime: z.string().describe('New end time (ISO 8601). Use empty string "" to skip.'),
+        description: z.string().describe('New description. Use "" to skip, "__CLEAR__" to clear.'),
+        location: z.string().describe('New location. Use "" to skip, "__CLEAR__" to clear.'),
+        calendarId: z.string().describe('Calendar ID. Use "primary" for default.'),
       }),
       execute: async (params) => {
         console.log('[CalendarAgent] Updating event:', params.eventId);
+        const skipEmpty = (v) => (v == null || v === '' ? undefined : v);
+        const clearable = (v) => (v === '__CLEAR__' ? '' : skipEmpty(v));
         return await updateEvent({
           eventId: params.eventId,
-          summary: params.summary || undefined,
-          startDateTime: params.startDateTime || undefined,
-          endDateTime: params.endDateTime || undefined,
-          description: params.description,
-          location: params.location,
+          summary: skipEmpty(params.summary),
+          startDateTime: skipEmpty(params.startDateTime),
+          endDateTime: skipEmpty(params.endDateTime),
+          description: clearable(params.description),
+          location: clearable(params.location),
           calendarId: params.calendarId || 'primary',
         });
       },

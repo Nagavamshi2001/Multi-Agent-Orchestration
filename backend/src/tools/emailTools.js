@@ -2,9 +2,11 @@ import nodemailer from 'nodemailer';
 import {
   createOAuth2Client,
   getGmailClient,
+  getGoogleRefreshToken,
+  getGoogleUserEmail,
   isEmailConfigured,
 } from '../utils/googleAuth.js';
-import { decodeBody, getHeader, extractBody } from '../utils/emailHelpers.js';
+import { getHeader, extractBody } from '../utils/emailHelpers.js';
 import { toolSuccess, toolError, toolEmpty } from '../utils/toolResponse.js';
 import { clampMaxResults } from '../utils/helpers.js';
 
@@ -14,8 +16,8 @@ export { isEmailConfigured };
 export const readUnreadEmails = async ({ maxResults = 10 }) => {
   if (!isEmailConfigured()) {
     return toolError(
-      'Gmail credentials not configured. Please set up your .env file with Gmail OAuth2 credentials.',
-      { setup: 'See .env.example for instructions' }
+      'Gmail not configured or you are not logged in.',
+      { setup: 'Login: /api/auth/google/start (or set DEVELOPER_MODE=true to use .env tokens)' }
     );
   }
 
@@ -53,10 +55,10 @@ export const readUnreadEmails = async ({ maxResults = 10 }) => {
       })
     );
 
-    return JSON.stringify({ count: emails.length, emails });
+    return toolSuccess({ count: emails.length, emails });
   } catch (err) {
     console.error('[readUnreadEmails] Error:', err.message);
-    return JSON.stringify({ error: `Failed to read emails: ${err.message}` });
+    return toolError(`Failed to read emails: ${err.message}`);
   }
 };
 
@@ -64,7 +66,8 @@ export const readUnreadEmails = async ({ maxResults = 10 }) => {
 export const sendEmail = async ({ to, subject, body, cc = '', bcc = '' }) => {
   if (!isEmailConfigured()) {
     return toolError(
-      'Gmail credentials not configured. Please set up your .env file with Gmail OAuth2 credentials.'
+      'Gmail not configured or you are not logged in.',
+      { setup: 'Login: /api/auth/google/start (or set DEVELOPER_MODE=true to use .env tokens)' }
     );
   }
 
@@ -72,21 +75,23 @@ export const sendEmail = async ({ to, subject, body, cc = '', bcc = '' }) => {
     const auth = createOAuth2Client();
     const accessTokenRes = await auth.getAccessToken();
     const accessToken = accessTokenRes.token;
+    const userEmail = getGoogleUserEmail();
+    const refreshToken = getGoogleRefreshToken();
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         type: 'OAuth2',
-        user: process.env.GMAIL_USER_EMAIL,
+        user: userEmail,
         clientId: process.env.GMAIL_CLIENT_ID,
         clientSecret: process.env.GMAIL_CLIENT_SECRET,
-        refreshToken: process.env.GMAIL_REFRESH_TOKEN,
+        refreshToken,
         accessToken,
       },
     });
 
     const mailOptions = {
-      from: `Me <${process.env.GMAIL_USER_EMAIL}>`,
+      from: `Me <${userEmail}>`,
       to,
       subject,
       text: body,
@@ -109,9 +114,10 @@ export const sendEmail = async ({ to, subject, body, cc = '', bcc = '' }) => {
 // ─── Tool: Search Emails ──────────────────────────────────────────────────────
 export const searchEmails = async ({ query, maxResults = 10 }) => {
   if (!isEmailConfigured()) {
-    return JSON.stringify({
-      error: 'Gmail credentials not configured. Please set up your .env file with Gmail OAuth2 credentials.',
-    });
+    return toolError(
+      'Gmail not configured or you are not logged in.',
+      { setup: 'Login: /api/auth/google/start (or set DEVELOPER_MODE=true to use .env tokens)' }
+    );
   }
 
   try {
@@ -119,16 +125,12 @@ export const searchEmails = async ({ query, maxResults = 10 }) => {
     const listRes = await gmail.users.messages.list({
       userId: 'me',
       q: query,
-      maxResults: Math.min(maxResults, 20),
+      maxResults: clampMaxResults(maxResults, 20),
     });
 
     const messages = listRes.data.messages || [];
     if (messages.length === 0) {
-      return JSON.stringify({
-        count: 0,
-        emails: [],
-        message: `No emails found matching: "${query}"`,
-      });
+      return toolEmpty(`No emails found matching: "${query}"`, { emails: [], query });
     }
 
     const emails = await Promise.all(

@@ -186,8 +186,9 @@ export const updateEvent = async ({
     const calendar = getCalendarClient();
     const body = {};
     if (summary != null && summary !== '') body.summary = summary;
-    if (description != null) body.description = description || undefined;
-    if (location != null) body.location = location || undefined;
+    // Allow clearing by explicitly passing empty string
+    if (description != null) body.description = description;
+    if (location != null) body.location = location;
     if (startDateTime)
       body.start = { dateTime: startDateTime, timeZone: 'UTC' };
     if (endDateTime)
