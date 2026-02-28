@@ -1,6 +1,6 @@
 # 🤖 Multi-Agent AI Orchestrator with Email Assistant
 
-A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface.
+A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, news retrieval, and web search through natural language.
 
 ## Architecture
 
@@ -11,20 +11,20 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 └──────────────┬──────────────────────────┘
                │ HTTP REST / WebSocket
                ▼
-┌─────────────────────────────────────────┐
-│        Node.js Express Server            │  ← Port 3001
-│                                         │
-│  ┌──────────────────────────────────┐   │
-│  │       Orchestrator Agent         │   │
-│  │   (Routes tasks to sub-agents)   │   │
-│  └──────────┬───────────────────────┘   │
-│             │ handoff()                  │
-│       ┌─────┼─────┬─────┐                 │
-│       ▼     ▼     ▼     ▼                 │
-│  ┌────────┐┌────────┐┌────────┐┌────────┐│
-│  │📧Email ││📅Cal   ││✅Tasks ││📰 News ││
-│  └────────┘└────────┘└────────┘└────────┘│
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────┐
+│            Node.js Express Server                  │  ← Port 3001
+│                                                   │
+│  ┌────────────────────────────────────────────┐   │
+│  │            Orchestrator Agent               │   │
+│  │      (Routes tasks to sub-agents)           │   │
+│  └─────────────────┬──────────────────────────┘   │
+│                    │ handoff()                    │
+│      ┌─────┼─────┬─────┬─────┬─────┐              │
+│      ▼     ▼     ▼     ▼     ▼                   │
+│  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
+│  │📧 Email  ││📅Calendar││✅ Tasks  ││📰 News   ││🔍 Search │
+│  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘
+└───────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -35,13 +35,16 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 
 ## Quick Start
 
-### 1. Set up Backend
+### 1. Clone & set up Backend
 
 ```bash
+git clone <repo-url>
 cd backend
 npm install
 cp .env.example .env   # Then edit .env with your keys
 ```
+
+> **Note:** `.env` is gitignored — never commit API keys or OAuth tokens. Use `.env.example` as a template.
 
 Edit `backend/.env`:
 ```env
@@ -133,9 +136,15 @@ Open [http://localhost:5173](http://localhost:5173)
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| AI Agents | OpenAI Agents SDK (`@openai/agents`) |
-| Email API | Google Gmail API + nodemailer |
+|-------|------------|
+| AI Agents | OpenAI Agents SDK (`@openai/agents`), GPT-4o |
+| Google APIs | Gmail, Calendar, Tasks (OAuth2) |
+| News | gnews (Google News RSS) |
+| Web Search | duck-duck-scrape |
 | Backend | Node.js, Express, WebSocket (ws) |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
+
+---
+
+📄 See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for full project documentation.
