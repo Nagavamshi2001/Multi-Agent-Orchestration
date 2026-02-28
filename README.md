@@ -1,5 +1,7 @@
 # 🤖 Multi-Agent AI Orchestrator with Email Assistant
 
+**Current release:** `v1.0.0`
+
 A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, news retrieval, and web search through natural language.
 
 ## Architecture
