@@ -7,19 +7,22 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 ```
 ┌─────────────────────────────────────────┐
 │           Vue.js Chat Interface          │  ← Port 5173
-│     (Dark glassmorphism design)         │
+│  (Dark glassmorphism, History panel)    │
 └──────────────┬──────────────────────────┘
                │ HTTP REST / WebSocket
                ▼
 ┌───────────────────────────────────────────────────┐
 │            Node.js Express Server                  │  ← Port 3001
-│                                                   │
-│  ┌────────────────────────────────────────────┐   │
-│  │            Orchestrator Agent               │   │
-│  │      (Routes tasks to sub-agents)           │   │
-│  └─────────────────┬──────────────────────────┘   │
-│                    │ handoff()                    │
-│      ┌─────┼─────┬─────┬─────┬─────┐              │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  SQLite (sql.js) — users, chat_sessions,     │ │
+│  │  chat_messages (persistent history)          │ │
+│  └─────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────┐ │
+│  │            Orchestrator Agent               │ │
+│  │      (Routes tasks to sub-agents)           │ │
+│  └─────────────────┬──────────────────────────┘ │
+│                    │ handoff()                   │
+│      ┌─────┼─────┬─────┬─────┬─────┐             │
 │      ▼     ▼     ▼     ▼     ▼                   │
 │  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
 │  │📧 Email  ││📅Calendar││✅ Tasks  ││📰 News   ││🔍 Search │
@@ -140,6 +143,11 @@ This project supports **two modes**:
 | `GET` | `/api/health` | Server + agent status |
 | `POST` | `/api/chat` | Send a message `{ message, sessionId }` |
 | `DELETE` | `/api/chat/:sessionId` | Clear session history |
+| `GET` | `/api/chat/sessions` | List chat sessions (auth required) |
+| `POST` | `/api/chat/sessions` | Create chat session |
+| `GET` | `/api/chat/sessions/:id/messages` | Get messages for a session |
+| `PATCH` | `/api/chat/sessions/:id` | Rename session |
+| `DELETE` | `/api/chat/sessions/:id` | Delete session |
 | `WS` | `/ws` | WebSocket chat connection |
 
 ---
@@ -161,6 +169,7 @@ This project supports **two modes**:
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape |
 | Backend | Node.js, Express, WebSocket (ws) |
+| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 

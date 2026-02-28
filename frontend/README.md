@@ -70,8 +70,15 @@ VITE_WS_URL=wss://your-backend.example.com/ws
 
 ## How it works (high level)
 
-- `ChatInterface.vue` renders the main chat layout, quick suggestions, login/logout, and error toasts.
-- `src/services/api.js` wraps Axios calls to the backend (`/api/health`, `/api/chat`, `/api/auth/*`).
+- **ChatInterface.vue** – main orchestrator; composes sub‑components and manages state, WebSocket, and handlers.
+- **ChatHeader.vue** – logo, auth (login/logout), History button, status pill, Clear button.
+- **EmptyState.vue** – empty state with suggestion chips when there are no messages.
+- **ChatInput.vue** – textarea and send button with auto‑resize.
+- **MessageBubble.vue** – individual message with agent badge, traces, and markdown formatting.
+- **LoginModal.vue** – sign‑in prompt with Google login.
+- **HistoryDrawer.vue** – panel to browse, open, and manage past chat sessions (requires auth).
+- **ErrorToast.vue** – dismissible error notification.
+- **src/services/api.js** – Axios wrapper for backend (`/api/health`, `/api/chat`, `/api/chat/sessions/*`, `/api/auth/*`).
 - A WebSocket connection streams messages and traces from the orchestrator in real time.
 
 For overall system architecture, see the root `README.md`.

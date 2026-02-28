@@ -27,6 +27,31 @@ export const clearSession = async (sessionId) => {
     return data;
 };
 
+export const listChatSessions = async () => {
+    const { data } = await api.get('/api/chat/sessions');
+    return data;
+};
+
+export const createChatSession = async (title) => {
+    const { data } = await api.post('/api/chat/sessions', title ? { title } : {});
+    return data;
+};
+
+export const getChatSessionMessages = async (chatSessionId) => {
+    const { data } = await api.get(`/api/chat/sessions/${encodeURIComponent(chatSessionId)}/messages`);
+    return data;
+};
+
+export const renameChatSession = async (chatSessionId, title) => {
+    const { data } = await api.patch(`/api/chat/sessions/${encodeURIComponent(chatSessionId)}`, { title });
+    return data;
+};
+
+export const deleteChatSession = async (chatSessionId) => {
+    const { data } = await api.delete(`/api/chat/sessions/${encodeURIComponent(chatSessionId)}`);
+    return data;
+};
+
 export const getMe = async () => {
     const { data } = await api.get('/api/auth/me');
     return data;

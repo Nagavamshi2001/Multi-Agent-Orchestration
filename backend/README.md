@@ -80,6 +80,8 @@ All config lives in `.env`. The example file `backend/.env.example` documents ev
 - `DB_PATH` – path to the SQLite DB file (default `./data/app.sqlite`)
 - `TOKEN_ENCRYPTION_KEY` – strong secret for encrypting stored refresh tokens (use a 32‑byte base64 string or similar)
 
+The SQLite DB stores: `users`, `google_tokens`, auth `sessions`, `chat_sessions`, and `chat_messages`. Chat history is persisted for logged‑in users; the History panel in the UI lets users browse and reopen past conversations.
+
 ### Server
 
 - `PORT` – HTTP + WebSocket port (default `3001`)
@@ -91,6 +93,11 @@ High‑level HTTP and WebSocket endpoints:
 - `GET /api/health` – health + configuration status
 - `POST /api/chat` – send a message `{ message, sessionId }`
 - `DELETE /api/chat/:sessionId` – clear a session
+- `GET /api/chat/sessions` – list chat sessions (auth required)
+- `POST /api/chat/sessions` – create chat session
+- `GET /api/chat/sessions/:chatSessionId/messages` – get messages for a session
+- `PATCH /api/chat/sessions/:chatSessionId` – rename session
+- `DELETE /api/chat/sessions/:chatSessionId` – delete session
 - `GET /api/auth/me` – current authenticated user
 - `POST /api/auth/logout` – logout
 - `GET /api/auth/google/start` – begin Google OAuth2 login
@@ -116,4 +123,21 @@ The frontend expects this backend to be reachable at `http://localhost:3001` by 
    ```
 
 3. Open the UI at `http://localhost:5173` and start chatting.
+
+## Code structure (backend)
+
+Key backend modules:
+
+- `src/server.js` – Express app setup, middleware, auth routes, REST chat + history routes, and WebSocket server bootstrap.
+- `src/agents/` – orchestrator and sub‑agents (email, calendar, tasks, news, search).
+- `src/db/client.js` – SQLite (sql.js) initialization, schema, and low‑level helpers.
+- `src/db/users.js` – user rows and encrypted Google tokens.
+- `src/db/authSessions.js` – auth sessions (`sessions` table) for login cookies.
+- `src/db/chatSessions.js` – chat history tables (`chat_sessions`, `chat_messages`).
+- `src/db/db.js` – barrel file re‑exporting the DB API (existing imports keep working).
+- `src/auth/googleRoutes.js` – Google OAuth2 login, callback, logout.
+- `src/auth/googleContext.js` – resolves the correct Google refresh token/email based on `DEVELOPER_MODE` and the current user.
+- `src/auth/session.js` – cookie parsing and `req.user` attachment.
+- `src/chat/conversationMemory.js` – in‑memory short history for unauthenticated sessions.
+- `src/ws/chatWsServer.js` – WebSocket `/ws` server with streaming traces and integration with the orchestrator.
 
