@@ -1,49 +1,132 @@
 import express from 'express';
 import cors from 'cors';
-import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import { run } from '@openai/agents';
 import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
 import orchestratorAgent from './agents/orchestrator.js';
-import { isEmailConfigured } from './tools/emailTools.js';
-import { isCalendarConfigured } from './tools/calendarTools.js';
-import { isTasksConfigured } from './tools/tasksTools.js';
+import {
+  isEmailConfigured,
+  isCalendarConfigured,
+  isTasksConfigured,
+} from './utils/googleAuth.js';
+import {
+  initDb,
+  cleanupExpiredSessions,
+  createChatSession,
+  ensureChatSession,
+  addChatMessage,
+  listChatSessionsByUserId,
+  getChatMessagesBySessionId,
+  getChatMessagesForAgentContext,
+  renameChatSession,
+  deleteChatSessionById,
+  clearChatSessionMessages,
+} from './db/db.js';
+import { attachUser } from './auth/session.js';
+import { googleAuthRouter } from './auth/googleRoutes.js';
+import { runWithContext } from './auth/requestContext.js';
+import { resolveGoogleContext } from './auth/googleContext.js';
+import { getHistory, addToHistory, clearConversation, formatHistory } from './chat/conversationMemory.js';
+import { attachChatWebSocketServer } from './ws/chatWsServer.js';
 
 dotenv.config();
 
 const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const developerMode = ['1', 'true', 'yes', 'on'].includes(String(process.env.DEVELOPER_MODE || '').toLowerCase());
+
+// Initialize local DB (sql.js)
+await initDb();
+// best-effort cleanup (non-blocking)
+cleanupExpiredSessions().catch(() => {});
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: '*' }));
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (origin === FRONTEND_URL) return cb(null, true);
+      return cb(new Error('CORS blocked'), false);
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+app.use(attachUser);
 
-// ─── Conversation History Store ───────────────────────────────────────────────
-// In-memory store keyed by sessionId (replace with DB for production)
-const conversationHistory = new Map();
+// ─── Auth Routes ──────────────────────────────────────────────────────────────
+app.use('/api/auth', googleAuthRouter());
 
-const getHistory = (sessionId) => conversationHistory.get(sessionId) || [];
-const addToHistory = (sessionId, role, content) => {
-    const history = getHistory(sessionId);
-    history.push({ role, content });
-    // Keep last 20 messages to manage context size
-    if (history.length > 20) history.splice(0, history.length - 20);
-    conversationHistory.set(sessionId, history);
+const requireUser = (req, res) => {
+  if (req.user?.id) return true;
+  res.status(401).json({ error: 'Authentication required' });
+  return false;
 };
 
-// ─── Format history for OpenAI Agents SDK ────────────────────────────────────
-// The SDK requires content to be an array of content-part objects, not a string.
-const formatHistory = (history) =>
-    history.map(({ role, content }) => ({
-        role,
-        content: [
-            {
-                type: role === 'user' ? 'input_text' : 'output_text',
-                text: content,
-            },
-        ],
-    }));
+// ─── REST: Chat History APIs (DB-backed) ──────────────────────────────────────
+app.get('/api/chat/sessions', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const sessions = await listChatSessionsByUserId({ userId: req.user.id, limit: 50, offset: 0 });
+    return res.json({ sessions });
+  } catch (err) {
+    console.error('[ChatHistory] list sessions error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat/sessions', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const { title } = req.body || {};
+    const session = await createChatSession({ userId: req.user.id, title: typeof title === 'string' ? title : undefined });
+    return res.json({ session });
+  } catch (err) {
+    console.error('[ChatHistory] create session error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/chat/sessions/:chatSessionId/messages', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const { chatSessionId } = req.params;
+    const messages = await getChatMessagesBySessionId({ chatSessionId, userId: req.user.id, limit: 1000, offset: 0 });
+    return res.json({ messages });
+  } catch (err) {
+    console.error('[ChatHistory] get messages error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/chat/sessions/:chatSessionId', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const { chatSessionId } = req.params;
+    const { title } = req.body || {};
+    await renameChatSession({ chatSessionId, userId: req.user.id, title: typeof title === 'string' ? title : null });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[ChatHistory] rename session error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/chat/sessions/:chatSessionId', async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const { chatSessionId } = req.params;
+    await deleteChatSessionById({ chatSessionId, userId: req.user.id });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[ChatHistory] delete session error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── REST: Health Check ───────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -75,21 +158,44 @@ app.post('/api/chat', async (req, res) => {
     try {
         console.log(`[Chat] sessionId=${sessionId} | message="${message.substring(0, 80)}..."`);
 
-        addToHistory(sessionId, 'user', message.trim());
-        const history = getHistory(sessionId);
+        const trimmed = message.trim();
+
+        let history = null;
+        if (req.user?.id) {
+          await ensureChatSession({ chatSessionId: sessionId, userId: req.user.id });
+          await addChatMessage({ chatSessionId: sessionId, userId: req.user.id, role: 'user', content: trimmed });
+          history = await getChatMessagesForAgentContext({ chatSessionId: sessionId, userId: req.user.id, limit: 20 });
+        } else {
+          addToHistory(sessionId, 'user', trimmed);
+          history = getHistory(sessionId);
+        }
 
         // Format history into SDK-compatible content-part arrays
         const agentInput = formatHistory(history);
 
-        // Run the orchestrator — it will handoff to sub-agents as needed
-        const result = await run(orchestratorAgent, agentInput);
+        const googleCtx = await resolveGoogleContext({ userId: req.user?.id || null, userEmail: req.user?.email });
+        // Run under request context so Google tools can pick correct user tokens
+        const result = await runWithContext(
+          { userId: req.user?.id || null, developerMode, ...googleCtx },
+          async () => await run(orchestratorAgent, agentInput)
+        );
 
         const assistantReply = result.finalOutput || 'I could not generate a response. Please try again.';
 
         // Track which agent ultimately answered
         const lastAgentName = result.lastAgent?.name || 'Orchestrator';
 
-        addToHistory(sessionId, 'assistant', assistantReply);
+        if (req.user?.id) {
+          await addChatMessage({
+            chatSessionId: sessionId,
+            userId: req.user.id,
+            role: 'assistant',
+            content: assistantReply,
+            agentName: lastAgentName,
+          });
+        } else {
+          addToHistory(sessionId, 'assistant', assistantReply);
+        }
 
         return res.json({
             reply: assistantReply,
@@ -105,185 +211,22 @@ app.post('/api/chat', async (req, res) => {
 });
 
 // ─── REST: Clear Session History ──────────────────────────────────────────────
-app.delete('/api/chat/:sessionId', (req, res) => {
-    conversationHistory.delete(req.params.sessionId);
+app.delete('/api/chat/:sessionId', async (req, res) => {
+    const sid = req.params.sessionId;
+    clearConversation(sid);
+    if (req.user?.id) {
+      try {
+        await clearChatSessionMessages({ chatSessionId: sid, userId: req.user.id });
+      } catch (err) {
+        console.error('[Chat] clear session error:', err);
+        return res.status(500).json({ error: err.message });
+      }
+    }
     res.json({ success: true, message: 'Session history cleared' });
 });
 
 // ─── WebSocket: Streaming Chat ────────────────────────────────────────────────
-const wss = new WebSocketServer({ server, path: '/ws' });
-
-wss.on('connection', (ws) => {
-    const sessionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(`[WebSocket] New connection: ${sessionId}`);
-
-    ws.on('message', async (data) => {
-        let payload;
-        try {
-            payload = JSON.parse(data.toString());
-        } catch {
-            ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON payload' }));
-            return;
-        }
-
-        const { message, sessionId: clientSessionId = sessionId } = payload;
-
-        if (!message?.trim()) {
-            ws.send(JSON.stringify({ type: 'error', message: 'Message cannot be empty' }));
-            return;
-        }
-
-        if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
-            ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured.' }));
-            return;
-        }
-
-        try {
-            ws.send(JSON.stringify({ type: 'status', status: 'thinking', sessionId: clientSessionId }));
-
-            addToHistory(clientSessionId, 'user', message.trim());
-            const history = getHistory(clientSessionId);
-            const agentInput = formatHistory(history);
-
-            // Use streaming mode to capture intermediate events (traces/thoughts)
-            const result = await run(orchestratorAgent, agentInput, { stream: true });
-
-            let lastAgentName = orchestratorAgent.name;
-
-            // Iterate over the stream of events
-            // Map internal tool names to human-friendly descriptions
-            const getFriendlyToolMessage = (toolName) => {
-                if (!toolName || toolName === 'action') return 'Executing action...';
-                const maps = {
-                    'read_unread_emails': 'Reading your unread emails...',
-                    'send_email': 'Composing and sending email...',
-                    'search_emails': 'Searching your inbox...',
-                    'delegate_to_email_assistant': 'Consulting the Email Assistant...',
-                    'list_upcoming_events': 'Fetching your upcoming events...',
-                    'create_calendar_event': 'Creating calendar event...',
-                    'delete_calendar_event': 'Deleting calendar event...',
-                    'search_calendar_events': 'Searching your calendar...',
-                    'delegate_to_calendar_assistant': 'Consulting the Calendar Assistant...',
-                    'list_task_lists': 'Fetching your task lists...',
-                    'list_tasks': 'Fetching your tasks...',
-                    'create_task': 'Creating task...',
-                    'complete_task': 'Marking task complete...',
-                    'delete_task': 'Deleting task...',
-                    'delegate_to_tasks_assistant': 'Consulting the Tasks Assistant...',
-                    'get_headlines': 'Fetching headlines...',
-                    'search_news': 'Searching news...',
-                    'get_news_by_topic': 'Fetching news by topic...',
-                    'get_news_by_location': 'Fetching news by location...',
-                    'delegate_to_news_assistant': 'Consulting the News Assistant...',
-                    'web_search': 'Searching the web...',
-                    'delegate_to_search_assistant': 'Consulting the Search Assistant...',
-                    'handoff_to_orchestrator': 'Returning to Orchestrator...',
-                };
-                const formattedName = toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ');
-                return maps[toolName] || `Executing ${formattedName}...`;
-            };
-
-            for await (const event of result) {
-                if (event.type === 'agent_updated_stream_event') {
-                    lastAgentName = event.agent.name;
-                    // Note: We don't always need a trace here if we have handoff_occurred
-                } else if (event.type === 'run_item_stream_event') {
-                    const { name, item } = event;
-
-                    if (name === 'tool_called' || name === 'tool_called_item_created') {
-                        const toolName = item?.function?.name || item?.name || item?.rawItem?.name || item?.toolName || 'action';
-                        ws.send(JSON.stringify({
-                            type: 'trace',
-                            step: 'tool_start',
-                            agentName: lastAgentName,
-                            tool: toolName,
-                            message: getFriendlyToolMessage(toolName),
-                            sessionId: clientSessionId
-                        }));
-                    } else if (name === 'handoff_requested') {
-                        const targetAgent = item?.handoff_target || item?.function?.name || item?.name || item?.rawItem?.name || 'another agent';
-                        ws.send(JSON.stringify({
-                            type: 'trace',
-                            step: 'handoff_init',
-                            agentName: lastAgentName,
-                            message: `Decided to route to ${targetAgent.replace(/delegate_to_/g, '').replace(/_/g, ' ')}...`,
-                            sessionId: clientSessionId
-                        }));
-                    } else if (name === 'handoff_occurred') {
-                        const targetAgentName = item.targetAgent?.name || 'another agent';
-                        ws.send(JSON.stringify({
-                            type: 'trace',
-                            step: 'handoff',
-                            agentName: targetAgentName,
-                            message: `Switched to ${targetAgentName}`,
-                            sessionId: clientSessionId
-                        }));
-                    } else if (name === 'reasoning_item_created') {
-                        // Attempt to extract actual thought text, fallback if empty
-                        let reasoningText = 'Analyzing request...';
-                        try {
-                            if (item.rawItem?.content && Array.isArray(item.rawItem.content)) {
-                                const textPart = item.rawItem.content.find(c => c.type === 'input_text' || c.type === 'output_text' || c.type === 'text');
-                                if (textPart && textPart.text) {
-                                    reasoningText = textPart.text;
-                                }
-                            }
-                        } catch (e) {
-                            // ignore and use fallback
-                        }
-
-                        ws.send(JSON.stringify({
-                            type: 'trace',
-                            step: 'reasoning',
-                            agentName: lastAgentName,
-                            message: reasoningText,
-                            sessionId: clientSessionId
-                        }));
-                    } else if (name === 'tool_output') {
-                        const toolName = item?.function?.name || item?.name || item?.rawItem?.name || item?.toolName || 'action';
-                        ws.send(JSON.stringify({
-                            type: 'trace',
-                            step: 'tool_end',
-                            agentName: lastAgentName,
-                            tool: toolName,
-                            message: `Completed action: ${toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ')}`,
-                            sessionId: clientSessionId
-                        }));
-                    }
-                }
-            }
-
-            // Once stream is done, get the final results
-            const finalReply = result.finalOutput || 'No response generated.';
-            const finalAgentName = result.lastAgent?.name || lastAgentName;
-
-            addToHistory(clientSessionId, 'assistant', finalReply);
-
-            ws.send(JSON.stringify({
-                type: 'response',
-                reply: finalReply,
-                agentName: finalAgentName,
-                sessionId: clientSessionId,
-            }));
-        } catch (err) {
-            console.error('[WebSocket] Error:', err);
-            ws.send(JSON.stringify({ type: 'error', message: err.message }));
-        }
-    });
-
-    ws.on('close', () => {
-        console.log(`[WebSocket] Disconnected: ${sessionId}`);
-    });
-
-    // Send welcome handshake
-    ws.send(
-        JSON.stringify({
-            type: 'connected',
-            sessionId,
-            message: 'Connected to Multi-Agent Orchestrator',
-        })
-    );
-});
+attachChatWebSocketServer({ server, developerMode });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 server.listen(PORT, () => {

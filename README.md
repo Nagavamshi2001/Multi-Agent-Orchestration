@@ -9,19 +9,22 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 ```
 ┌─────────────────────────────────────────┐
 │           Vue.js Chat Interface          │  ← Port 5173
-│     (Dark glassmorphism design)         │
+│  (Dark glassmorphism, History panel)    │
 └──────────────┬──────────────────────────┘
                │ HTTP REST / WebSocket
                ▼
 ┌───────────────────────────────────────────────────┐
 │            Node.js Express Server                  │  ← Port 3001
-│                                                   │
-│  ┌────────────────────────────────────────────┐   │
-│  │            Orchestrator Agent               │   │
-│  │      (Routes tasks to sub-agents)           │   │
-│  └─────────────────┬──────────────────────────┘   │
-│                    │ handoff()                    │
-│      ┌─────┼─────┬─────┬─────┬─────┐              │
+│  ┌─────────────────────────────────────────────┐ │
+│  │  SQLite (sql.js) — users, chat_sessions,     │ │
+│  │  chat_messages (persistent history)          │ │
+│  └─────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────┐ │
+│  │            Orchestrator Agent               │ │
+│  │      (Routes tasks to sub-agents)           │ │
+│  └─────────────────┬──────────────────────────┘ │
+│                    │ handoff()                   │
+│      ┌─────┼─────┬─────┬─────┬─────┐             │
 │      ▼     ▼     ▼     ▼     ▼                   │
 │  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
 │  │📧 Email  ││📅Calendar││✅ Tasks  ││📰 News   ││🔍 Search │
@@ -84,15 +87,34 @@ Open [http://localhost:5173](http://localhost:5173)
 
 ## Google OAuth2 Setup
 
+This project supports **two modes**:
+
+### Mode A — Developer Mode (single account via `.env`)
+
+- Set `DEVELOPER_MODE=true` in `backend/.env`
+- Use OAuth Playground to generate one refresh token and store:
+  - `GMAIL_CLIENT_ID`
+  - `GMAIL_CLIENT_SECRET`
+  - `GMAIL_REFRESH_TOKEN`
+  - `GMAIL_USER_EMAIL`
+
+### Mode B — Multi-user Google SSO (recommended)
+
+- Set `DEVELOPER_MODE=false`
+- Users click **Login** in the UI, which starts OAuth at `/api/auth/google/start`
+- The server stores each user’s refresh token in a **local SQLite file** (`DB_PATH`) encrypted using `TOKEN_ENCRYPTION_KEY`
+
+#### Steps
+
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project → Enable **Gmail API**, **Google Calendar API**, and **Google Tasks API**
-3. Go to **Credentials** → Create **OAuth 2.0 Client ID** (type: Desktop App)
-4. Note your `CLIENT_ID` and `CLIENT_SECRET`
-5. Open [Google OAuth Playground](https://developers.google.com/oauthplayground/)
-   - Click ⚙️ → Check "Use your own OAuth credentials" → Enter Client ID & Secret
-   - In Step 1: Select `https://mail.google.com/`, `https://www.googleapis.com/auth/calendar`, and `https://www.googleapis.com/auth/tasks` → Authorize
-   - In Step 2: Exchange code for tokens → Copy **Refresh token**
-6. Paste values into `backend/.env`
+3. Go to **Credentials** → Create **OAuth 2.0 Client ID**
+4. Set these in `backend/.env`:
+   - `GMAIL_CLIENT_ID`
+   - `GMAIL_CLIENT_SECRET`
+   - `FRONTEND_URL` (default `http://localhost:5173`)
+   - `TOKEN_ENCRYPTION_KEY` (strong secret)
+   - `DB_PATH` (default `./data/app.sqlite`)
 
 ---
 
@@ -123,6 +145,11 @@ Open [http://localhost:5173](http://localhost:5173)
 | `GET` | `/api/health` | Server + agent status |
 | `POST` | `/api/chat` | Send a message `{ message, sessionId }` |
 | `DELETE` | `/api/chat/:sessionId` | Clear session history |
+| `GET` | `/api/chat/sessions` | List chat sessions (auth required) |
+| `POST` | `/api/chat/sessions` | Create chat session |
+| `GET` | `/api/chat/sessions/:id/messages` | Get messages for a session |
+| `PATCH` | `/api/chat/sessions/:id` | Rename session |
+| `DELETE` | `/api/chat/sessions/:id` | Delete session |
 | `WS` | `/ws` | WebSocket chat connection |
 
 ---
@@ -144,6 +171,7 @@ Open [http://localhost:5173](http://localhost:5173)
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape |
 | Backend | Node.js, Express, WebSocket (ws) |
+| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 
