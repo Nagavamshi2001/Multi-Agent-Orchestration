@@ -1,0 +1,48 @@
+# Render Blueprint: Multi-Agent Orchestration System
+# Backend (Node) + Frontend (Vue static). Set branch in Render to release-1.1.0.
+
+services:
+  # Node.js API + WebSocket backend
+  - type: web
+    runtime: node
+    name: multi-agent-backend
+    branch: release-1.1.0
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      # Add in Render Dashboard: OPENAI_API_KEY, GMAIL_* (see backend .env.example)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GMAIL_CLIENT_ID
+        sync: false
+      - key: GMAIL_CLIENT_SECRET
+        sync: false
+      - key: GMAIL_REFRESH_TOKEN
+        sync: false
+      - key: GMAIL_USER_EMAIL
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+      - key: DEVELOPER_MODE
+        value: "true"
+
+  # Vue static frontend (build-time env points to backend URL)
+  - type: web
+    runtime: static
+    name: multi-agent-frontend
+    branch: release-1.1.0
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://multi-agent-backend.onrender.com
+      - key: VITE_WS_URL
+        value: wss://multi-agent-backend.onrender.com/ws
