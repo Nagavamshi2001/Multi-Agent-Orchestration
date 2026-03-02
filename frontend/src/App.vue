@@ -10,7 +10,9 @@
       @login="chatRef?.loginWithGoogle?.()"
       @logout="chatRef?.doLogout?.()"
       @toggle-history="chatRef?.toggleHistory?.()"
+      @new-chat="chatRef?.startNewChat?.()"
       @clear="chatRef?.clearChat?.()"
+      @go-to-chat="selectView('chat')"
     />
     <main class="app-shell-main">
       <ChatInterface ref="chatRef" v-show="activeView === 'chat'" />

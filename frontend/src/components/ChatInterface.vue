@@ -349,6 +349,7 @@ defineExpose({
   doLogout,
   toggleHistory,
   clearChat,
+  startNewChat,
   statusClass,
   statusLabel,
   me,

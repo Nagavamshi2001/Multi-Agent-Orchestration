@@ -8,13 +8,19 @@
         <span class="context-label">{{ activeViewLabel }}</span>
       </div>
     </div>
-    <div class="app-shell-center">
+    <button
+      type="button"
+      class="app-shell-center logo-button"
+      @click="$emit('goToChat')"
+      title="Go to chat"
+      aria-label="Go to chat"
+    >
       <div class="shell-logo-orb"><span>✦</span></div>
       <div class="shell-titles">
         <h1 class="shell-title">AI Agent Hub</h1>
         <p class="shell-subtitle">Personal multi-agent workspace assistant</p>
       </div>
-    </div>
+    </button>
     <div class="app-shell-right">
       <button
         v-if="!user"
@@ -44,6 +50,15 @@
       <button
         v-if="activeView === 'chat'"
         type="button"
+        class="btn-new-chat"
+        @click="$emit('newChat')"
+        title="Start new chat"
+      >
+        New chat
+      </button>
+      <button
+        v-if="activeView === 'chat'"
+        type="button"
         class="btn-clear"
         @click="$emit('clear')"
         title="Clear conversation"
@@ -65,7 +80,7 @@ defineProps({
   statusClass: { type: String, default: 'checking' },
   statusLabel: { type: String, default: 'Connecting…' },
 });
-defineEmits(['openMenu', 'login', 'logout', 'toggleHistory', 'clear']);
+defineEmits(['openMenu', 'login', 'logout', 'toggleHistory', 'clear', 'newChat', 'goToChat']);
 </script>
 
 <style scoped>
@@ -117,6 +132,23 @@ defineEmits(['openMenu', 'login', 'logout', 'toggleHistory', 'clear']);
   justify-content: center;
   gap: 10px;
 }
+.logo-button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  color: inherit;
+  font: inherit;
+}
+.logo-button:hover {
+  background: rgba(99, 102, 241, 0.1);
+}
+.logo-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
 .shell-logo-orb {
   width: 34px;
   height: 34px;
@@ -149,6 +181,24 @@ defineEmits(['openMenu', 'login', 'logout', 'toggleHistory', 'clear']);
   gap: 10px;
   flex-wrap: wrap;
   justify-self: end;
+}
+.btn-new-chat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-new-chat:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
 }
 .btn-clear {
   display: flex;
