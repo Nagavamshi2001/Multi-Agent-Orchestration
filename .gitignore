@@ -53,10 +53,6 @@ credentials.json
 token.json
 *.pem
 
-# Local MCP server config (machine-specific paths/commands)
-backend/mcp.config.json
-mcp.config.json
-
 # Cache
 .cache/
 .npm/
