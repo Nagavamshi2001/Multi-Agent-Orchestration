@@ -71,6 +71,7 @@ const requireUser = (req, res) => {
 app.get('/api/chat/sessions', async (req, res) => {
   if (!requireUser(req, res)) return;
   try {
+    console.log('[ChatHistory] list sessions for user:', req.user.id);
     const sessions = await listChatSessionsByUserId({ userId: req.user.id, limit: 50, offset: 0 });
     return res.json({ sessions });
   } catch (err) {
@@ -83,6 +84,7 @@ app.post('/api/chat/sessions', async (req, res) => {
   if (!requireUser(req, res)) return;
   try {
     const { title } = req.body || {};
+    console.log('[ChatHistory] create session for user:', req.user.id, 'title:', title);
     const session = await createChatSession({ userId: req.user.id, title: typeof title === 'string' ? title : undefined });
     return res.json({ session });
   } catch (err) {
@@ -95,6 +97,7 @@ app.get('/api/chat/sessions/:chatSessionId/messages', async (req, res) => {
   if (!requireUser(req, res)) return;
   try {
     const { chatSessionId } = req.params;
+    console.log('[ChatHistory] get messages for user:', req.user.id, 'session:', chatSessionId);
     const messages = await getChatMessagesBySessionId({ chatSessionId, userId: req.user.id, limit: 1000, offset: 0 });
     return res.json({ messages });
   } catch (err) {
@@ -108,6 +111,7 @@ app.patch('/api/chat/sessions/:chatSessionId', async (req, res) => {
   try {
     const { chatSessionId } = req.params;
     const { title } = req.body || {};
+    console.log('[ChatHistory] rename session for user:', req.user.id, 'session:', chatSessionId, 'newTitle:', title);
     await renameChatSession({ chatSessionId, userId: req.user.id, title: typeof title === 'string' ? title : null });
     return res.json({ success: true });
   } catch (err) {
@@ -120,6 +124,7 @@ app.delete('/api/chat/sessions/:chatSessionId', async (req, res) => {
   if (!requireUser(req, res)) return;
   try {
     const { chatSessionId } = req.params;
+    console.log('[ChatHistory] delete session for user:', req.user.id, 'session:', chatSessionId);
     await deleteChatSessionById({ chatSessionId, userId: req.user.id });
     return res.json({ success: true });
   } catch (err) {
@@ -156,16 +161,23 @@ app.post('/api/chat', async (req, res) => {
     }
 
     try {
-        console.log(`[Chat] sessionId=${sessionId} | message="${message.substring(0, 80)}..."`);
+        console.log(
+          `[Chat] Incoming message | sessionId=${sessionId} | userId=${req.user?.id || 'ANON'} | "${message.substring(
+            0,
+            80
+          )}..."`
+        );
 
         const trimmed = message.trim();
 
         let history = null;
         if (req.user?.id) {
+          console.log('[Chat] Using DB-backed history for user:', req.user.id, 'session:', sessionId);
           await ensureChatSession({ chatSessionId: sessionId, userId: req.user.id });
           await addChatMessage({ chatSessionId: sessionId, userId: req.user.id, role: 'user', content: trimmed });
           history = await getChatMessagesForAgentContext({ chatSessionId: sessionId, userId: req.user.id, limit: 20 });
         } else {
+          console.log('[Chat] Using in-memory history (unauthenticated). Session:', sessionId);
           addToHistory(sessionId, 'user', trimmed);
           history = getHistory(sessionId);
         }
@@ -186,6 +198,7 @@ app.post('/api/chat', async (req, res) => {
         const lastAgentName = result.lastAgent?.name || 'Orchestrator';
 
         if (req.user?.id) {
+          console.log('[Chat] Saving assistant reply to DB for user:', req.user.id, 'session:', sessionId);
           await addChatMessage({
             chatSessionId: sessionId,
             userId: req.user.id,

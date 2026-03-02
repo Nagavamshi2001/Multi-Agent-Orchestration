@@ -128,6 +128,12 @@ export const googleAuthRouter = () => {
       });
 
       const session = await createSession({ userId });
+      console.log('[OAuthCallback] Created session for user:', {
+        userId,
+        email: profile.email,
+        sessionId: session.id,
+        expiresAt: session.expiresAt,
+      });
 
       res.clearCookie(OAUTH_STATE_COOKIE, { path: '/api/auth' });
       res.clearCookie(OAUTH_RETURN_COOKIE, { path: '/api/auth' });

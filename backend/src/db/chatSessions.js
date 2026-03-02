@@ -15,6 +15,7 @@ export const createChatSession = async ({ userId, title } = {}) => {
     [id, userId, title || null, ts, ts]
   );
   await persist();
+  console.log('[DB] Created chat session:', { id, userId, title: title || null });
   return { id, title: title || null, createdAt: ts, updatedAt: ts };
 };
 
@@ -32,6 +33,11 @@ export const ensureChatSession = async ({ chatSessionId, userId, title } = {}) =
         userId,
       ]);
       await persist();
+      console.log('[DB] Updated chat session title via ensureChatSession:', {
+        id: chatSessionId,
+        userId,
+        title,
+      });
     }
     return { id: chatSessionId, title: existing.title || null };
   }
@@ -40,6 +46,11 @@ export const ensureChatSession = async ({ chatSessionId, userId, title } = {}) =
     [chatSessionId, userId, title || null, ts, ts]
   );
   await persist();
+  console.log('[DB] ensureChatSession created new chat session:', {
+    id: chatSessionId,
+    userId,
+    title: title || null,
+  });
   return { id: chatSessionId, title: title || null };
 };
 
@@ -86,6 +97,14 @@ export const addChatMessage = async ({ chatSessionId, userId, role, content, age
     'INSERT INTO chat_messages (id, chat_session_id, role, content, agent_name, created_at) VALUES (?, ?, ?, ?, ?, ?);',
     [id, chatSessionId, role, content, agentName || null, ts]
   );
+  console.log('[DB] Inserted chat message:', {
+    id,
+    chatSessionId,
+    userId,
+    role,
+    hasContent: !!content,
+    agentName: agentName || null,
+  });
 
   // Best-effort title: first user message snippet
   if (role === 'user') {

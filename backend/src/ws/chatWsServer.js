@@ -1,7 +1,12 @@
 import { WebSocketServer } from 'ws';
 import { run } from '@openai/agents';
 import orchestratorAgent from '../agents/orchestrator.js';
-import { getUserBySessionId } from '../db/db.js';
+import {
+  getUserBySessionId,
+  ensureChatSession,
+  addChatMessage,
+  getChatMessagesForAgentContext,
+} from '../db/db.js';
 import { parseCookies, SESSION_COOKIE } from '../auth/session.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
@@ -56,11 +61,21 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
 
         let history = null;
         if (wsUserId) {
-          // DB-backed history for authenticated users is handled in server.js chat routes; for WS,
-          // we reuse the in-memory short-term history to build context (like for unauth users).
-          addToHistory(clientSessionId, 'user', trimmed);
-          history = getHistory(clientSessionId);
+          console.log('[ChatWS] Using DB-backed history for user:', wsUserId, 'session:', clientSessionId);
+          await ensureChatSession({ chatSessionId: clientSessionId, userId: wsUserId });
+          await addChatMessage({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            role: 'user',
+            content: trimmed,
+          });
+          history = await getChatMessagesForAgentContext({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            limit: 20,
+          });
         } else {
+          console.log('[ChatWS] Using in-memory history (unauthenticated). Session:', clientSessionId);
           addToHistory(clientSessionId, 'user', trimmed);
           history = getHistory(clientSessionId);
         }
@@ -199,7 +214,18 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         const finalReply = result.finalOutput || 'No response generated.';
         const finalAgentName = result.lastAgent?.name || lastAgentName;
 
-        addToHistory(clientSessionId, 'assistant', finalReply);
+        if (wsUserId) {
+          console.log('[ChatWS] Saving assistant reply to DB for user:', wsUserId, 'session:', clientSessionId);
+          await addChatMessage({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            role: 'assistant',
+            content: finalReply,
+            agentName: finalAgentName,
+          });
+        } else {
+          addToHistory(clientSessionId, 'assistant', finalReply);
+        }
 
         ws.send(
           JSON.stringify({

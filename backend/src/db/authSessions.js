@@ -12,12 +12,14 @@ export const createSession = async ({ userId, ttlMs }) => {
     expiresAt,
   ]);
   await persist();
+  console.log('[DB] Created auth session:', { id, userId, expiresAt });
   return { id, expiresAt };
 };
 
 export const deleteSession = async (sessionId) => {
   exec('DELETE FROM sessions WHERE id = ?;', [sessionId]);
   await persist();
+  console.log('[DB] Deleted auth session:', { sessionId });
 };
 
 export const getUserBySessionId = async (sessionId) => {
@@ -29,6 +31,15 @@ export const getUserBySessionId = async (sessionId) => {
      WHERE s.id = ? AND s.expires_at > ?;`,
     [sessionId, ts]
   );
+  if (!row) {
+    console.log('[DB] getUserBySessionId: no active session found for id:', sessionId);
+  } else {
+    console.log('[DB] getUserBySessionId: resolved user for session:', {
+      sessionId,
+      userId: row.id,
+      email: row.email,
+    });
+  }
   return row || null;
 };
 
@@ -36,5 +47,6 @@ export const cleanupExpiredSessions = async () => {
   const ts = nowMs();
   exec('DELETE FROM sessions WHERE expires_at <= ?;', [ts]);
   await persist();
+  console.log('[DB] Cleaned up expired auth sessions older than:', ts);
 };
 
