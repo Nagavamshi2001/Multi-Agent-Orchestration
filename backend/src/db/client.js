@@ -106,6 +106,30 @@ const initSchema = () => {
       FOREIGN KEY(chat_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON chat_messages(chat_session_id, created_at);
+
+    -- Chat metrics for evaluation (latency, ratings, feedback)
+    CREATE TABLE IF NOT EXISTS chat_metrics (
+      id TEXT PRIMARY KEY,
+      chat_session_id TEXT NOT NULL,
+      user_id TEXT,
+      latency_ms INTEGER NOT NULL,
+      rating INTEGER,
+      helpful INTEGER,
+      feedback_text TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(chat_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_metrics_user_created ON chat_metrics(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY,
+      openai_key_enc TEXT,
+      openai_model TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 };
 

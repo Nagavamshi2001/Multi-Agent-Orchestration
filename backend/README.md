@@ -45,6 +45,12 @@ cp .env.example .env   # then edit .env
   npm start
   ```
 
+- **MCP server (tools over stdio)**
+
+  ```bash
+  npm run mcp
+  ```
+
 ## Environment variables
 
 All config lives in `.env`. The example file `backend/.env.example` documents every variable. Key settings:
@@ -91,18 +97,34 @@ The SQLite DB stores: `users`, `google_tokens`, auth `sessions`, `chat_sessions`
 High‑level HTTP and WebSocket endpoints:
 
 - `GET /api/health` – health + configuration status
-- `POST /api/chat` – send a message `{ message, sessionId }`
-- `DELETE /api/chat/:sessionId` – clear a session
-- `GET /api/chat/sessions` – list chat sessions (auth required)
-- `POST /api/chat/sessions` – create chat session
-- `GET /api/chat/sessions/:chatSessionId/messages` – get messages for a session
-- `PATCH /api/chat/sessions/:chatSessionId` – rename session
-- `DELETE /api/chat/sessions/:chatSessionId` – delete session
-- `GET /api/auth/me` – current authenticated user
-- `POST /api/auth/logout` – logout
-- `GET /api/auth/google/start` – begin Google OAuth2 login
-- `GET /api/auth/google/callback` – OAuth2 callback
-- `WS /ws` – WebSocket chat stream
+
+- **Chat**
+  - `POST /api/chat` – send a message `{ message, sessionId }` to the orchestrator
+  - `DELETE /api/chat/:sessionId` – clear a session (in‑memory + DB‑backed if logged in)
+
+- **Chat history (DB‑backed, auth required)**
+  - `GET /api/chat/sessions` – list chat sessions for the current user
+  - `POST /api/chat/sessions` – create a new chat session
+  - `GET /api/chat/sessions/:chatSessionId/messages` – get messages for a chat session
+  - `PATCH /api/chat/sessions/:chatSessionId` – rename a chat session
+  - `DELETE /api/chat/sessions/:chatSessionId` – delete a chat session
+
+- **Auth**
+  - `GET /api/auth/me` – current authenticated user
+  - `POST /api/auth/logout` – logout
+  - `GET /api/auth/google/start` – begin Google OAuth2 login
+  - `GET /api/auth/google/callback` – OAuth2 callback
+
+- **Evaluation metrics**
+  - `POST /api/metrics/feedback` – record latency + optional rating/helpful/feedback for a chat session
+  - `GET /api/metrics/summary` – summary stats (count, avg latency, avg rating) for the current user
+
+- **MCP server config**
+  - `GET /api/mcp/servers` – list configured MCP servers from `backend/mcp.config.json`
+  - `POST /api/mcp/servers` – add or update an MCP server entry
+
+- **WebSocket**
+  - `WS /ws` – WebSocket chat stream with step‑by‑step traces from the orchestrator and sub‑agents
 
 The frontend expects this backend to be reachable at `http://localhost:3001` by default (configurable via `VITE_API_URL` and `VITE_WS_URL` on the frontend).
 
@@ -126,18 +148,76 @@ The frontend expects this backend to be reachable at `http://localhost:3001` by 
 
 ## Code structure (backend)
 
-Key backend modules:
+Layout is split for reuse and clarity: config in one place, app factory for tests, routes mounted from a single module, MCP split into logger and tool registration.
 
-- `src/server.js` – Express app setup, middleware, auth routes, REST chat + history routes, and WebSocket server bootstrap.
-- `src/agents/` – orchestrator and sub‑agents (email, calendar, tasks, news, search).
-- `src/db/client.js` – SQLite (sql.js) initialization, schema, and low‑level helpers.
-- `src/db/users.js` – user rows and encrypted Google tokens.
-- `src/db/authSessions.js` – auth sessions (`sessions` table) for login cookies.
-- `src/db/chatSessions.js` – chat history tables (`chat_sessions`, `chat_messages`).
-- `src/db/db.js` – barrel file re‑exporting the DB API (existing imports keep working).
-- `src/auth/googleRoutes.js` – Google OAuth2 login, callback, logout.
-- `src/auth/googleContext.js` – resolves the correct Google refresh token/email based on `DEVELOPER_MODE` and the current user.
-- `src/auth/session.js` – cookie parsing and `req.user` attachment.
-- `src/chat/conversationMemory.js` – in‑memory short history for unauthenticated sessions.
-- `src/ws/chatWsServer.js` – WebSocket `/ws` server with streaming traces and integration with the orchestrator.
+```
+src/
+├── server.js              # Entry: preload → initDb → createApp → attach WS → listen
+├── app.js                 # Express app factory (middleware + routes + error handler); reusable
+├── preload.js             # Loads dotenv and disables OpenAI tracing before any SDK
+├── config/
+│   └── index.js           # Central config (port, frontendUrl, developerMode, logLevel, dbPath) from env
+├── routes/
+│   ├── index.js           # mountRoutes(app, options) – mounts all API routers
+│   ├── healthRoutes.js    # GET /api/health
+│   ├── chatRoutes.js      # /api/chat, /api/chat/sessions*
+│   ├── metricsRoutes.js   # /api/metrics/*
+│   ├── mcpRoutes.js       # /api/mcp/servers (list/update MCP config)
+│   └── settingsRoutes.js  # /api/settings (user preferences, OpenAI key)
+├── auth/
+│   ├── session.js         # Cookie parsing, attachUser middleware
+│   ├── googleRoutes.js    # Google OAuth2 start/callback, logout
+│   ├── googleContext.js   # Resolve refresh token/email (developer vs multi-user)
+│   └── requestContext.js  # AsyncLocalStorage for per-request context (used by MCP tools)
+├── db/
+│   ├── db.js              # Barrel: initDb, sessions, users, chat, metrics, settings
+│   ├── client.js          # SQLite (sql.js) init and schema
+│   ├── users.js           # Users + encrypted Google tokens
+│   ├── authSessions.js    # Auth sessions table
+│   ├── chatSessions.js    # chat_sessions, chat_messages
+│   ├── metrics.js         # chat_metrics + summary
+│   └── userSettings.js    # User settings (e.g. OpenAI key override)
+├── agents/
+│   ├── orchestrator.js    # Main orchestrator; delegates to sub-agents
+│   ├── emailAgent.js      # Email tools (read/send/search)
+│   ├── calendarAgent.js   # Calendar events
+│   ├── tasksAgent.js      # Google Tasks
+│   ├── newsAgent.js       # News headlines/search
+│   └── searchAgent.js     # Web search
+├── tools/
+│   ├── registry.js        # Single source of truth: all tool defs (agent + MCP)
+│   ├── emailTools.js      # Gmail implementations
+│   ├── calendarTools.js   # Calendar API
+│   ├── tasksTools.js      # Tasks API
+│   ├── newsTools.js       # gnews
+│   └── searchTools.js     # duck-duck-scrape
+├── mcp/
+│   ├── server.js          # MCP stdio entry: create server → registerAllTools → connect
+│   ├── logger.js          # Stderr-only logger (blue ANSI) for MCP
+│   ├── registerTools.js   # registerAllTools(server, log) – registry → MCP handlers
+│   ├── client.js          # Spawns MCP server subprocess; callMcpTool() for agents
+│   └── toolBridge.js      # Builds agent tools that forward execute() to MCP client
+├── ws/
+│   └── chatWsServer.js    # WebSocket /ws: streaming chat, orchestrator, tool calls
+├── chat/
+│   └── conversationMemory.js  # In-memory history for unauthenticated sessions
+├── middleware/
+│   └── rateLimit.js       # Per-user/IP rate limiting
+└── utils/
+    ├── index.js           # Barrel: toolResponse, helpers, googleAuth, emailHelpers
+    ├── logger.js          # Structured logging (LOG_LEVEL)
+    ├── openaiRun.js       # runAgent, resolveOpenAIConfig
+    ├── googleAuth.js      # isEmailConfigured, isCalendarConfigured, etc.
+    ├── toolResponse.js    # toolSuccess, toolError, toolEmpty
+    ├── helpers.js         # clampMaxResults, formatNewsArticle, etc.
+    ├── emailHelpers.js    # Gmail message helpers
+    └── tokenCrypto.js     # Encrypt/decrypt stored refresh tokens
+```
+
+### Reuse
+
+- **Config** – Import `config` from `./config/index.js` for port, frontendUrl, developerMode, logLevel, dbPath instead of reading `process.env` in multiple files.
+- **App** – Use `createApp()` from `./app.js` in tests or alternate entry points; same middleware and routes without starting the HTTP server.
+- **Routes** – All API routes are mounted from `routes/index.js` via `mountRoutes(app, options)`.
+- **MCP** – Tool registration lives in `mcp/registerTools.js`; `mcp/server.js` stays a thin entry (create server, register tools, connect transport).
 

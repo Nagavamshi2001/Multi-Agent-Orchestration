@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { exec, queryOne, queryAll, nowMs, persist } from './client.js';
+import { logger } from '../utils/logger.js';
 
 const requireChatSessionOwner = ({ chatSessionId, userId }) => {
   const row = queryOne('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?;', [chatSessionId, userId]);
@@ -15,6 +16,7 @@ export const createChatSession = async ({ userId, title } = {}) => {
     [id, userId, title || null, ts, ts]
   );
   await persist();
+  logger.debug('db.chat_sessions.insert', { id, userId, title: title || null });
   return { id, title: title || null, createdAt: ts, updatedAt: ts };
 };
 
@@ -32,6 +34,7 @@ export const ensureChatSession = async ({ chatSessionId, userId, title } = {}) =
         userId,
       ]);
       await persist();
+      logger.debug('db.chat_sessions.ensure.updateTitle', { id: chatSessionId, userId, title });
     }
     return { id: chatSessionId, title: existing.title || null };
   }
@@ -40,6 +43,7 @@ export const ensureChatSession = async ({ chatSessionId, userId, title } = {}) =
     [chatSessionId, userId, title || null, ts, ts]
   );
   await persist();
+  logger.debug('db.chat_sessions.ensure.insert', { id: chatSessionId, userId, title: title || null });
   return { id: chatSessionId, title: title || null };
 };
 
@@ -86,6 +90,14 @@ export const addChatMessage = async ({ chatSessionId, userId, role, content, age
     'INSERT INTO chat_messages (id, chat_session_id, role, content, agent_name, created_at) VALUES (?, ?, ?, ?, ?, ?);',
     [id, chatSessionId, role, content, agentName || null, ts]
   );
+  logger.debug('db.chat_messages.insert', {
+    id,
+    chatSessionId,
+    userId,
+    role,
+    hasContent: !!content,
+    agentName: agentName || null,
+  });
 
   // Best-effort title: first user message snippet
   if (role === 'user') {

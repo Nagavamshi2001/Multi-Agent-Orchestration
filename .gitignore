@@ -8,6 +8,9 @@ node_modules/
 backend/.env
 backend/.env.local
 backend/.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 
 # Build outputs / generated data
 dist/
@@ -16,12 +19,14 @@ backend/dist/
 backend/build/
 backend/data/
 data/
-backend/data/app.sqlite
-data/app.sqlite
+*.sqlite
 
 # Vite
 frontend/dist/
 frontend/node_modules/.vite/
+
+# Cursor IDE
+.cursor/
 
 # Logs
 logs/
@@ -47,6 +52,10 @@ Desktop.ini
 credentials.json
 token.json
 *.pem
+
+# Local MCP server config (machine-specific paths/commands)
+backend/mcp.config.json
+mcp.config.json
 
 # Cache
 .cache/

@@ -1,15 +1,5 @@
 <template>
   <div class="chat-interface">
-    <ChatHeader
-      :me="me"
-      :status-class="statusClass"
-      :status-label="statusLabel"
-      @login="loginWithGoogle"
-      @logout="doLogout"
-      @toggle-history="toggleHistory"
-      @clear="clearChat"
-    />
-
     <main class="messages-area" ref="messagesEnd">
       <EmptyState v-if="messages.length === 0" @suggestion="useSuggestion" />
       <div v-else class="messages-list">
@@ -18,6 +8,7 @@
           :key="msg.id"
           :message="msg"
           :is-loading="isLoading && msg === messages[messages.length - 1]"
+          @feedback="handleFeedback"
         />
       </div>
     </main>
@@ -46,9 +37,8 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue';
+import { ref, nextTick, onMounted, watch, defineExpose } from 'vue';
 import MessageBubble from './MessageBubble.vue';
-import ChatHeader from './ChatHeader.vue';
 import EmptyState from './EmptyState.vue';
 import ChatInput from './ChatInput.vue';
 import LoginModal from './LoginModal.vue';
@@ -63,6 +53,7 @@ import {
   listChatSessions,
   createChatSession,
   getChatSessionMessages,
+  sendMetricsFeedback,
 } from '../services/api.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -129,6 +120,19 @@ const connectWebSocket = () => {
       if (lastMsg) {
         lastMsg.content = data.reply;
         lastMsg.agentName = data.agentName;
+        const nowTs = Date.now();
+        const base = lastMsg._sentAt || nowTs;
+        lastMsg.latencyMs = nowTs - base;
+
+        if (me.value) {
+          sendMetricsFeedback({
+            chatSessionId: data.sessionId || sessionId.value,
+            latencyMs: lastMsg.latencyMs,
+            rating: null,
+            helpful: null,
+            feedbackText: null,
+          }).catch(() => {});
+        }
       }
       isLoading.value = false;
       scrollToBottom();
@@ -238,7 +242,10 @@ const addMessage = (role, content, agentName = null) => {
     content,
     agentName,
     timestamp: new Date().toISOString(),
-    traces: []
+    traces: [],
+    latencyMs: null,
+    userFeedback: null,
+    feedbackSaved: false,
   };
   messages.value.push(msg);
   return msg;
@@ -255,7 +262,8 @@ const sendMessage = async () => {
   await scrollToBottom();
 
   isLoading.value = true;
-  addMessage('assistant', '', 'Orchestrator');
+  const assistantMsg = addMessage('assistant', '', 'Orchestrator');
+  assistantMsg._sentAt = Date.now();
 
   if (socket.value && socket.value.readyState === WebSocket.OPEN) {
     socket.value.send(JSON.stringify({
@@ -289,6 +297,31 @@ const clearChat = async () => {
   sessionId.value = `session_${Date.now()}`;
 };
 
+const handleFeedback = async (payload) => {
+  const { id, rating, helpful } = payload || {};
+  const msg = messages.value.find((m) => m.id === id && m.role === 'assistant');
+  if (!msg) return;
+
+  msg.userFeedback = helpful ? 'up' : 'down';
+
+  if (!me.value) {
+    return;
+  }
+
+  try {
+    await sendMetricsFeedback({
+      chatSessionId: sessionId.value,
+      latencyMs: typeof msg.latencyMs === 'number' ? msg.latencyMs : 0,
+      rating,
+      helpful,
+      feedbackText: null,
+    });
+    msg.feedbackSaved = true;
+  } catch (e) {
+    error.value = e?.response?.data?.error || e?.message || 'Failed to send feedback';
+  }
+};
+
 onMounted(async () => {
   connectWebSocket();
   try {
@@ -310,13 +343,23 @@ onMounted(async () => {
     refreshHistory().catch(() => {});
   }
 });
+
+defineExpose({
+  loginWithGoogle,
+  doLogout,
+  toggleHistory,
+  clearChat,
+  statusClass,
+  statusLabel,
+  me,
+});
 </script>
 
 <style scoped>
 .chat-interface {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: var(--color-bg);
   position: relative;
   overflow: hidden;

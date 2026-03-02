@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { exec, queryOne, nowMs, persist } from './client.js';
+import { logger } from '../utils/logger.js';
 
 export const createSession = async ({ userId, ttlMs }) => {
   const id = crypto.randomUUID();
@@ -12,12 +13,14 @@ export const createSession = async ({ userId, ttlMs }) => {
     expiresAt,
   ]);
   await persist();
+  logger.debug('db.sessions.insert', { id, userId, expiresAt });
   return { id, expiresAt };
 };
 
 export const deleteSession = async (sessionId) => {
   exec('DELETE FROM sessions WHERE id = ?;', [sessionId]);
   await persist();
+  logger.debug('db.sessions.delete', { sessionId });
 };
 
 export const getUserBySessionId = async (sessionId) => {
@@ -29,6 +32,11 @@ export const getUserBySessionId = async (sessionId) => {
      WHERE s.id = ? AND s.expires_at > ?;`,
     [sessionId, ts]
   );
+  if (!row) {
+    logger.debug('db.sessions.getUserBySessionId.miss', { sessionId });
+  } else {
+    logger.debug('db.sessions.getUserBySessionId.hit', { sessionId, userId: row.id, email: row.email });
+  }
   return row || null;
 };
 
@@ -36,5 +44,6 @@ export const cleanupExpiredSessions = async () => {
   const ts = nowMs();
   exec('DELETE FROM sessions WHERE expires_at <= ?;', [ts]);
   await persist();
+  logger.info('db.sessions.cleanupExpired', { asOf: ts });
 };
 

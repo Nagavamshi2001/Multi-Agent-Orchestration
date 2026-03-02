@@ -1,18 +1,24 @@
 import { WebSocketServer } from 'ws';
-import { run } from '@openai/agents';
-import orchestratorAgent from '../agents/orchestrator.js';
-import { getUserBySessionId } from '../db/db.js';
+import { createOrchestratorAgent } from '../agents/orchestrator.js';
+import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
+import {
+  getUserBySessionId,
+  ensureChatSession,
+  addChatMessage,
+  getChatMessagesForAgentContext,
+} from '../db/db.js';
 import { parseCookies, SESSION_COOKIE } from '../auth/session.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
 import { getHistory, addToHistory, formatHistory } from '../chat/conversationMemory.js';
+import { logger } from '../utils/logger.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', async (ws, req) => {
     const sessionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(`[WebSocket] New connection: ${sessionId}`);
+    logger.info('ws.connection.open', { sessionId });
 
     // Resolve user once on connection (cookie sent during WS upgrade)
     let wsUser = null;
@@ -23,12 +29,29 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
       if (sid) {
         wsUser = await getUserBySessionId(sid);
         wsUserId = wsUser?.id || null;
+        logger.debug('ws.connection.user', { sessionId, userId: wsUserId });
       }
     } catch {
       wsUserId = null;
     }
 
+    // Per-connection rate limiting (simple sliding window)
+    const WS_WINDOW_MS = 10_000; // 10 seconds
+    const WS_MAX_MESSAGES = 10;
+    let messageTimestamps = [];
+
     ws.on('message', async (data) => {
+      const nowTs = Date.now();
+      const windowStart = nowTs - WS_WINDOW_MS;
+      messageTimestamps = messageTimestamps.filter((t) => t >= windowStart);
+
+      if (messageTimestamps.length >= WS_MAX_MESSAGES) {
+        logger.warn('ws.rate_limited', { sessionId, userId: wsUserId });
+        ws.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded, please slow down.' }));
+        return;
+      }
+      messageTimestamps.push(nowTs);
+
       let payload;
       try {
         payload = JSON.parse(data.toString());
@@ -44,8 +67,9 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         return;
       }
 
-      if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
-        ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured.' }));
+      const openaiConfig = resolveOpenAIConfig(wsUserId, developerMode);
+      if (!openaiConfig.apiKey) {
+        ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured. Set it in Settings or in server .env.' }));
         return;
       }
 
@@ -56,11 +80,21 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
 
         let history = null;
         if (wsUserId) {
-          // DB-backed history for authenticated users is handled in server.js chat routes; for WS,
-          // we reuse the in-memory short-term history to build context (like for unauth users).
-          addToHistory(clientSessionId, 'user', trimmed);
-          history = getHistory(clientSessionId);
+          logger.debug('ws.chat.history.db', { userId: wsUserId, sessionId: clientSessionId });
+          await ensureChatSession({ chatSessionId: clientSessionId, userId: wsUserId });
+          await addChatMessage({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            role: 'user',
+            content: trimmed,
+          });
+          history = await getChatMessagesForAgentContext({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            limit: 20,
+          });
         } else {
+          console.log('[ChatWS] Using in-memory history (unauthenticated). Session:', clientSessionId);
           addToHistory(clientSessionId, 'user', trimmed);
           history = getHistory(clientSessionId);
         }
@@ -72,9 +106,16 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           userEmail: wsUser?.email,
           developerMode,
         });
+        const requestContext = { userId: wsUserId, developerMode, ...googleCtx };
+        logger.debug('ws.chat.request_context', {
+          userId: wsUserId,
+          hasGoogleToken: !!requestContext.googleRefreshToken,
+          developerMode,
+        });
+        const orchestratorAgent = createOrchestratorAgent(requestContext);
         const result = await runWithContext(
-          { userId: wsUserId, developerMode, ...googleCtx },
-          async () => await run(orchestratorAgent, agentInput, { stream: true })
+          requestContext,
+          async () => await runAgent(orchestratorAgent, agentInput, { userId: wsUserId, stream: true, developerMode })
         );
 
         let lastAgentName = orchestratorAgent.name;
@@ -199,7 +240,22 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         const finalReply = result.finalOutput || 'No response generated.';
         const finalAgentName = result.lastAgent?.name || lastAgentName;
 
-        addToHistory(clientSessionId, 'assistant', finalReply);
+        if (wsUserId) {
+          logger.debug('ws.chat.message.persist', {
+            userId: wsUserId,
+            sessionId: clientSessionId,
+            agentName: finalAgentName,
+          });
+          await addChatMessage({
+            chatSessionId: clientSessionId,
+            userId: wsUserId,
+            role: 'assistant',
+            content: finalReply,
+            agentName: finalAgentName,
+          });
+        } else {
+          addToHistory(clientSessionId, 'assistant', finalReply);
+        }
 
         ws.send(
           JSON.stringify({
@@ -210,13 +266,17 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           })
         );
       } catch (err) {
-        console.error('[WebSocket] Error:', err);
+        logger.error('ws.chat.error', {
+          sessionId,
+          userId: wsUserId,
+          error: err.message,
+        });
         ws.send(JSON.stringify({ type: 'error', message: err.message }));
       }
     });
 
     ws.on('close', () => {
-      console.log(`[WebSocket] Disconnected: ${sessionId}`);
+      logger.info('ws.connection.close', { sessionId, userId: wsUserId });
     });
 
     ws.send(
