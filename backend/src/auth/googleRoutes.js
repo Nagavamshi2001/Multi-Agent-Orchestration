@@ -19,6 +19,19 @@ const getRedirectUri = (req) => {
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
 
+/** When frontend is on a different origin (HTTPS in prod), cookies must be SameSite=None; Secure for cross-origin requests. */
+const getSessionCookieOptions = () => {
+  const frontendUrl = getFrontendUrl();
+  const isCrossOrigin = frontendUrl.startsWith('https://');
+  return {
+    httpOnly: true,
+    sameSite: isCrossOrigin ? 'none' : 'lax',
+    secure: isCrossOrigin,
+    path: '/',
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  };
+};
+
 const getOAuthClient = (req) =>
   new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
@@ -139,13 +152,7 @@ export const googleAuthRouter = () => {
       res.clearCookie(OAUTH_STATE_COOKIE, { path: '/api/auth' });
       res.clearCookie(OAUTH_RETURN_COOKIE, { path: '/api/auth' });
 
-      res.cookie(SESSION_COOKIE, session.id, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: false,
-        path: '/',
-        maxAge: 1000 * 60 * 60 * 24 * 7,
-      });
+      res.cookie(SESSION_COOKIE, session.id, getSessionCookieOptions());
 
       return res.redirect(returnTo);
     } catch (err) {
@@ -165,7 +172,8 @@ export const googleAuthRouter = () => {
     if (sessionId) {
       await deleteSession(sessionId);
     }
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    const opts = getSessionCookieOptions();
+    res.clearCookie(SESSION_COOKIE, { path: opts.path, sameSite: opts.sameSite, secure: opts.secure });
     return res.json({ success: true });
   });
 
