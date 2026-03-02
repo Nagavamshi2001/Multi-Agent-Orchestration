@@ -166,6 +166,28 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 
 ---
 
+## User Settings & Integrations
+
+### User settings
+
+Logged-in users can manage preferences from the **Settings** panel in the UI (sidebar → Settings):
+
+- **OpenAI API key** — Optional per-user override; if set, the backend uses it for that user’s chat requests instead of the server’s `OPENAI_API_KEY`.
+- **Model** — Choose the chat model (e.g. `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`). Stored per user in SQLite.
+
+Settings are persisted in the backend (`user_settings` table) and exposed via `GET /api/settings` and `PUT /api/settings` (auth required).
+
+### Integrations (MCP)
+
+The **Integrations** panel in the UI (sidebar → Integrations) lists and manages **MCP (Model Context Protocol) servers**. You can:
+
+- View configured servers (from `backend/mcp.config.json`).
+- Add or edit server entries (id, name, command, args, enabled). The backend writes these to `mcp.config.json`.
+
+Use this to register the local Google Workspace MCP server (or other MCP servers) so tools are available to Cursor or other MCP clients. The same config is used by `GET /api/mcp/servers` and `POST /api/mcp/servers`.
+
+---
+
 ## MCP (Model Context Protocol)
 
 The backend can run as an **MCP server** over stdio for tool exposure (e.g. to Cursor or other MCP clients):
