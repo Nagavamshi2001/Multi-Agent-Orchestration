@@ -31,7 +31,7 @@ services:
       - key: TOKEN_ENCRYPTION_KEY
         generateValue: true
       - key: DEVELOPER_MODE
-        value: "true"
+        value: "false"
 
   # Vue static frontend (build-time env points to backend URL)
   - type: web
