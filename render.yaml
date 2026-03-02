@@ -40,8 +40,10 @@ services:
     branch: release-1.1.0
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: ./frontend/dist
+    staticPublishPath: frontend/dist
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: VITE_API_URL
         value: https://multi-agent-backend.onrender.com
       - key: VITE_WS_URL
