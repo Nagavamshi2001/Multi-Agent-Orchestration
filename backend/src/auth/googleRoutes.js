@@ -39,9 +39,9 @@ export const googleAuthRouter = () => {
   const router = express.Router();
 
   router.get('/google/start', (req, res) => {
-    // if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
-    //   return res.status(500).json({ error: 'Missing GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET in backend .env' });
-    // }
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+      return res.status(500).json({ error: 'Missing GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET. Set them in the backend environment (e.g. Render Dashboard → multi-agent-backend → Environment).' });
+    }
     if (!process.env.TOKEN_ENCRYPTION_KEY) {
       return res.status(500).json({ error: 'Missing TOKEN_ENCRYPTION_KEY in backend .env (required to store refresh tokens)' });
     }
