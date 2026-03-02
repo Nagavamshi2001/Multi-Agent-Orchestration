@@ -1,0 +1,12 @@
+{
+  "servers": [
+    {
+      "id": "local-gworkspace",
+      "name": "Google Workspace Tools (local)",
+      "command": "node",
+      "args": ["./src/mcp/server.js"],
+      "enabled": true
+    }
+  ]
+}
+
