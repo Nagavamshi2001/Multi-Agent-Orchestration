@@ -58,18 +58,36 @@
       {{ message.content }}
     </div>
 
-    <!-- Timestamp -->
-    <div class="bubble-time">{{ formattedTime }}</div>
+    <!-- Timestamp + Metrics / Feedback -->
+    <div class="bubble-meta">
+      <span class="bubble-time">{{ formattedTime }}</span>
+      <template v-if="message.role === 'assistant'">
+        <span
+          v-if="typeof message.latencyMs === 'number' && message.latencyMs !== null"
+          class="latency-pill"
+        >
+          {{ Math.round(message.latencyMs) }} ms
+        </span>
+        <FeedbackControls
+          :user-feedback="message.userFeedback"
+          :feedback-saved="message.feedbackSaved"
+          @feedback="handleFeedback"
+        />
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue';
+import FeedbackControls from './FeedbackControls.vue';
 
 const props = defineProps({
   message: { type: Object, required: true },
-  isLoading: { type: Boolean, default: false }
+  isLoading: { type: Boolean, default: false },
 });
+
+const emit = defineEmits(['feedback']);
 
 const isTraceExpanded = ref(false);
 
@@ -126,6 +144,10 @@ const formattedContent = computed(() => {
 
   return text;
 });
+
+const handleFeedback = (payload) => {
+  emit('feedback', { id: props.message.id, ...payload });
+};
 </script>
 
 <style scoped>
@@ -428,10 +450,26 @@ const formattedContent = computed(() => {
 }
 
 /* Timestamp */
-.bubble-time {
+.bubble-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.68rem;
   color: var(--color-text-muted);
-  opacity: 0.7;
+  opacity: 0.8;
   padding: 0 4px;
 }
+
+.bubble-time {
+  white-space: nowrap;
+}
+
+.latency-pill {
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  font-size: 0.65rem;
+}
+
 </style>

@@ -23,3 +23,4 @@ export {
   getChatMessagesBySessionId,
   getChatMessagesForAgentContext,
 } from './chatSessions.js';
+export { recordChatMetric, getMetricsSummary } from './metrics.js';

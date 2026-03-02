@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { exec, queryOne, nowMs, persist } from './client.js';
+import { logger } from '../utils/logger.js';
 
 export const createSession = async ({ userId, ttlMs }) => {
   const id = crypto.randomUUID();
@@ -12,14 +13,14 @@ export const createSession = async ({ userId, ttlMs }) => {
     expiresAt,
   ]);
   await persist();
-  console.log('[DB] Created auth session:', { id, userId, expiresAt });
+  logger.debug('db.sessions.insert', { id, userId, expiresAt });
   return { id, expiresAt };
 };
 
 export const deleteSession = async (sessionId) => {
   exec('DELETE FROM sessions WHERE id = ?;', [sessionId]);
   await persist();
-  console.log('[DB] Deleted auth session:', { sessionId });
+  logger.debug('db.sessions.delete', { sessionId });
 };
 
 export const getUserBySessionId = async (sessionId) => {
@@ -32,13 +33,9 @@ export const getUserBySessionId = async (sessionId) => {
     [sessionId, ts]
   );
   if (!row) {
-    console.log('[DB] getUserBySessionId: no active session found for id:', sessionId);
+    logger.debug('db.sessions.getUserBySessionId.miss', { sessionId });
   } else {
-    console.log('[DB] getUserBySessionId: resolved user for session:', {
-      sessionId,
-      userId: row.id,
-      email: row.email,
-    });
+    logger.debug('db.sessions.getUserBySessionId.hit', { sessionId, userId: row.id, email: row.email });
   }
   return row || null;
 };
@@ -47,6 +44,6 @@ export const cleanupExpiredSessions = async () => {
   const ts = nowMs();
   exec('DELETE FROM sessions WHERE expires_at <= ?;', [ts]);
   await persist();
-  console.log('[DB] Cleaned up expired auth sessions older than:', ts);
+  logger.info('db.sessions.cleanupExpired', { asOf: ts });
 };
 

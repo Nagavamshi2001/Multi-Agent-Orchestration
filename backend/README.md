@@ -91,18 +91,30 @@ The SQLite DB stores: `users`, `google_tokens`, auth `sessions`, `chat_sessions`
 High‑level HTTP and WebSocket endpoints:
 
 - `GET /api/health` – health + configuration status
-- `POST /api/chat` – send a message `{ message, sessionId }`
-- `DELETE /api/chat/:sessionId` – clear a session
-- `GET /api/chat/sessions` – list chat sessions (auth required)
-- `POST /api/chat/sessions` – create chat session
-- `GET /api/chat/sessions/:chatSessionId/messages` – get messages for a session
-- `PATCH /api/chat/sessions/:chatSessionId` – rename session
-- `DELETE /api/chat/sessions/:chatSessionId` – delete session
-- `GET /api/auth/me` – current authenticated user
-- `POST /api/auth/logout` – logout
-- `GET /api/auth/google/start` – begin Google OAuth2 login
-- `GET /api/auth/google/callback` – OAuth2 callback
-- `WS /ws` – WebSocket chat stream
+
+- **Chat**
+  - `POST /api/chat` – send a message `{ message, sessionId }` to the orchestrator
+  - `DELETE /api/chat/:sessionId` – clear a session (in‑memory + DB‑backed if logged in)
+
+- **Chat history (DB‑backed, auth required)**
+  - `GET /api/chat/sessions` – list chat sessions for the current user
+  - `POST /api/chat/sessions` – create a new chat session
+  - `GET /api/chat/sessions/:chatSessionId/messages` – get messages for a chat session
+  - `PATCH /api/chat/sessions/:chatSessionId` – rename a chat session
+  - `DELETE /api/chat/sessions/:chatSessionId` – delete a chat session
+
+- **Auth**
+  - `GET /api/auth/me` – current authenticated user
+  - `POST /api/auth/logout` – logout
+  - `GET /api/auth/google/start` – begin Google OAuth2 login
+  - `GET /api/auth/google/callback` – OAuth2 callback
+
+- **Evaluation metrics**
+  - `POST /api/metrics/feedback` – record latency + optional rating/helpful/feedback for a chat session
+  - `GET /api/metrics/summary` – summary stats (count, avg latency, avg rating) for the current user
+
+- **WebSocket**
+  - `WS /ws` – WebSocket chat stream with step‑by‑step traces from the orchestrator and sub‑agents
 
 The frontend expects this backend to be reachable at `http://localhost:3001` by default (configurable via `VITE_API_URL` and `VITE_WS_URL` on the frontend).
 
@@ -128,16 +140,22 @@ The frontend expects this backend to be reachable at `http://localhost:3001` by 
 
 Key backend modules:
 
-- `src/server.js` – Express app setup, middleware, auth routes, REST chat + history routes, and WebSocket server bootstrap.
+- `src/server.js` – Express app setup, core middleware, route mounting, WebSocket bootstrap, and startup logging.
+- `src/routes/healthRoutes.js` – `GET /api/health`.
+- `src/routes/chatRoutes.js` – chat REST endpoints (`/api/chat`, `/api/chat/sessions*`).
+- `src/routes/metricsRoutes.js` – metrics/evaluation REST endpoints (`/api/metrics/*`).
 - `src/agents/` – orchestrator and sub‑agents (email, calendar, tasks, news, search).
 - `src/db/client.js` – SQLite (sql.js) initialization, schema, and low‑level helpers.
 - `src/db/users.js` – user rows and encrypted Google tokens.
 - `src/db/authSessions.js` – auth sessions (`sessions` table) for login cookies.
 - `src/db/chatSessions.js` – chat history tables (`chat_sessions`, `chat_messages`).
+- `src/db/metrics.js` – `chat_metrics` table for latency, ratings, and feedback, plus summary helpers.
 - `src/db/db.js` – barrel file re‑exporting the DB API (existing imports keep working).
 - `src/auth/googleRoutes.js` – Google OAuth2 login, callback, logout.
 - `src/auth/googleContext.js` – resolves the correct Google refresh token/email based on `DEVELOPER_MODE` and the current user.
 - `src/auth/session.js` – cookie parsing and `req.user` attachment.
 - `src/chat/conversationMemory.js` – in‑memory short history for unauthenticated sessions.
 - `src/ws/chatWsServer.js` – WebSocket `/ws` server with streaming traces and integration with the orchestrator.
+- `src/middleware/rateLimit.js` – per‑user/IP rate limiting middleware for REST.
+- `src/utils/logger.js` – structured logging utility with level control via `LOG_LEVEL`.
 

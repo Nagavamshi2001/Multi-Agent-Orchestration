@@ -140,17 +140,21 @@ This project supports **two modes**:
 
 ## API Endpoints
 
+High‑level HTTP and WebSocket endpoints exposed by the backend:
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Server + agent status |
-| `POST` | `/api/chat` | Send a message `{ message, sessionId }` |
-| `DELETE` | `/api/chat/:sessionId` | Clear session history |
+| `GET` | `/api/health` | Server + agent status, config flags for Google + OpenAI |
+| `POST` | `/api/chat` | Send a message `{ message, sessionId }` to the orchestrator |
+| `DELETE` | `/api/chat/:sessionId` | Clear session history (in‑memory + DB if authenticated) |
 | `GET` | `/api/chat/sessions` | List chat sessions (auth required) |
 | `POST` | `/api/chat/sessions` | Create chat session |
 | `GET` | `/api/chat/sessions/:id/messages` | Get messages for a session |
 | `PATCH` | `/api/chat/sessions/:id` | Rename session |
 | `DELETE` | `/api/chat/sessions/:id` | Delete session |
-| `WS` | `/ws` | WebSocket chat connection |
+| `POST` | `/api/metrics/feedback` | Store latency + optional rating/helpful/feedback for a chat session |
+| `GET` | `/api/metrics/summary` | Summary metrics (total, avg latency, avg rating) for current user |
+| `WS` | `/ws` | WebSocket chat connection with streaming traces |
 
 ---
 

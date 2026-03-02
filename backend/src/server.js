@@ -1,34 +1,20 @@
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
-import { run } from '@openai/agents';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
-import orchestratorAgent from './agents/orchestrator.js';
-import {
-  isEmailConfigured,
-  isCalendarConfigured,
-  isTasksConfigured,
-} from './utils/googleAuth.js';
 import {
   initDb,
   cleanupExpiredSessions,
-  createChatSession,
-  ensureChatSession,
-  addChatMessage,
-  listChatSessionsByUserId,
-  getChatMessagesBySessionId,
-  getChatMessagesForAgentContext,
-  renameChatSession,
-  deleteChatSessionById,
-  clearChatSessionMessages,
 } from './db/db.js';
 import { attachUser } from './auth/session.js';
 import { googleAuthRouter } from './auth/googleRoutes.js';
-import { runWithContext } from './auth/requestContext.js';
-import { resolveGoogleContext } from './auth/googleContext.js';
-import { getHistory, addToHistory, clearConversation, formatHistory } from './chat/conversationMemory.js';
 import { attachChatWebSocketServer } from './ws/chatWsServer.js';
+import { logger } from './utils/logger.js';
+import { isEmailConfigured, isCalendarConfigured, isTasksConfigured } from './utils/googleAuth.js';
+import { chatRouter } from './routes/chatRoutes.js';
+import { metricsRouter } from './routes/metricsRoutes.js';
+import { healthRouter } from './routes/healthRoutes.js';
 
 dotenv.config();
 
@@ -58,204 +44,46 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(attachUser);
 
-// ─── Auth Routes ──────────────────────────────────────────────────────────────
+// ─── Auth & Feature Routes ────────────────────────────────────────────────────
 app.use('/api/auth', googleAuthRouter());
-
-const requireUser = (req, res) => {
-  if (req.user?.id) return true;
-  res.status(401).json({ error: 'Authentication required' });
-  return false;
-};
-
-// ─── REST: Chat History APIs (DB-backed) ──────────────────────────────────────
-app.get('/api/chat/sessions', async (req, res) => {
-  if (!requireUser(req, res)) return;
-  try {
-    console.log('[ChatHistory] list sessions for user:', req.user.id);
-    const sessions = await listChatSessionsByUserId({ userId: req.user.id, limit: 50, offset: 0 });
-    return res.json({ sessions });
-  } catch (err) {
-    console.error('[ChatHistory] list sessions error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/chat/sessions', async (req, res) => {
-  if (!requireUser(req, res)) return;
-  try {
-    const { title } = req.body || {};
-    console.log('[ChatHistory] create session for user:', req.user.id, 'title:', title);
-    const session = await createChatSession({ userId: req.user.id, title: typeof title === 'string' ? title : undefined });
-    return res.json({ session });
-  } catch (err) {
-    console.error('[ChatHistory] create session error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/chat/sessions/:chatSessionId/messages', async (req, res) => {
-  if (!requireUser(req, res)) return;
-  try {
-    const { chatSessionId } = req.params;
-    console.log('[ChatHistory] get messages for user:', req.user.id, 'session:', chatSessionId);
-    const messages = await getChatMessagesBySessionId({ chatSessionId, userId: req.user.id, limit: 1000, offset: 0 });
-    return res.json({ messages });
-  } catch (err) {
-    console.error('[ChatHistory] get messages error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/chat/sessions/:chatSessionId', async (req, res) => {
-  if (!requireUser(req, res)) return;
-  try {
-    const { chatSessionId } = req.params;
-    const { title } = req.body || {};
-    console.log('[ChatHistory] rename session for user:', req.user.id, 'session:', chatSessionId, 'newTitle:', title);
-    await renameChatSession({ chatSessionId, userId: req.user.id, title: typeof title === 'string' ? title : null });
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('[ChatHistory] rename session error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete('/api/chat/sessions/:chatSessionId', async (req, res) => {
-  if (!requireUser(req, res)) return;
-  try {
-    const { chatSessionId } = req.params;
-    console.log('[ChatHistory] delete session for user:', req.user.id, 'session:', chatSessionId);
-    await deleteChatSessionById({ chatSessionId, userId: req.user.id });
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('[ChatHistory] delete session error:', err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── REST: Health Check ───────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        agents: ['orchestrator', 'emailAssistant', 'calendarAssistant', 'tasksAssistant', 'newsAssistant', 'searchAssistant'],
-        emailConfigured: isEmailConfigured(),
-        calendarConfigured: isCalendarConfigured(),
-        tasksConfigured: isTasksConfigured(),
-        openaiConfigured: !!process.env.OPENAI_API_KEY,
-    });
-});
-
-// ─── REST: Chat Endpoint ──────────────────────────────────────────────────────
-app.post('/api/chat', async (req, res) => {
-    const { message, sessionId = 'default' } = req.body;
-
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-        return res.status(400).json({ error: 'Message is required' });
-    }
-
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
-        return res.status(500).json({
-            error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.',
-        });
-    }
-
-    try {
-        console.log(
-          `[Chat] Incoming message | sessionId=${sessionId} | userId=${req.user?.id || 'ANON'} | "${message.substring(
-            0,
-            80
-          )}..."`
-        );
-
-        const trimmed = message.trim();
-
-        let history = null;
-        if (req.user?.id) {
-          console.log('[Chat] Using DB-backed history for user:', req.user.id, 'session:', sessionId);
-          await ensureChatSession({ chatSessionId: sessionId, userId: req.user.id });
-          await addChatMessage({ chatSessionId: sessionId, userId: req.user.id, role: 'user', content: trimmed });
-          history = await getChatMessagesForAgentContext({ chatSessionId: sessionId, userId: req.user.id, limit: 20 });
-        } else {
-          console.log('[Chat] Using in-memory history (unauthenticated). Session:', sessionId);
-          addToHistory(sessionId, 'user', trimmed);
-          history = getHistory(sessionId);
-        }
-
-        // Format history into SDK-compatible content-part arrays
-        const agentInput = formatHistory(history);
-
-        const googleCtx = await resolveGoogleContext({ userId: req.user?.id || null, userEmail: req.user?.email });
-        // Run under request context so Google tools can pick correct user tokens
-        const result = await runWithContext(
-          { userId: req.user?.id || null, developerMode, ...googleCtx },
-          async () => await run(orchestratorAgent, agentInput)
-        );
-
-        const assistantReply = result.finalOutput || 'I could not generate a response. Please try again.';
-
-        // Track which agent ultimately answered
-        const lastAgentName = result.lastAgent?.name || 'Orchestrator';
-
-        if (req.user?.id) {
-          console.log('[Chat] Saving assistant reply to DB for user:', req.user.id, 'session:', sessionId);
-          await addChatMessage({
-            chatSessionId: sessionId,
-            userId: req.user.id,
-            role: 'assistant',
-            content: assistantReply,
-            agentName: lastAgentName,
-          });
-        } else {
-          addToHistory(sessionId, 'assistant', assistantReply);
-        }
-
-        return res.json({
-            reply: assistantReply,
-            agentName: lastAgentName,
-            sessionId,
-        });
-    } catch (err) {
-        console.error('[Chat] Error:', err);
-        return res.status(500).json({
-            error: `An error occurred: ${err.message}`,
-        });
-    }
-});
-
-// ─── REST: Clear Session History ──────────────────────────────────────────────
-app.delete('/api/chat/:sessionId', async (req, res) => {
-    const sid = req.params.sessionId;
-    clearConversation(sid);
-    if (req.user?.id) {
-      try {
-        await clearChatSessionMessages({ chatSessionId: sid, userId: req.user.id });
-      } catch (err) {
-        console.error('[Chat] clear session error:', err);
-        return res.status(500).json({ error: err.message });
-      }
-    }
-    res.json({ success: true, message: 'Session history cleared' });
-});
+app.use('/api', healthRouter());
+app.use('/api', chatRouter({ developerMode }));
+app.use('/api', metricsRouter());
 
 // ─── WebSocket: Streaming Chat ────────────────────────────────────────────────
 attachChatWebSocketServer({ server, developerMode });
 
+// ─── Global Error Handler (fallback) ──────────────────────────────────────────
+// Note: most routes already handle errors explicitly. This is a safety net.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  logger.error('http.unhandled', {
+    path: req.path,
+    method: req.method,
+    userId: req.user?.id || null,
+    message: err.message,
+    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
+  });
+
+  const status = err.status || 500;
+  const safeMessage =
+    status >= 500
+      ? 'Internal server error. Please try again later.'
+      : err.message || 'Request failed';
+
+  res.status(status).json({ error: safeMessage });
+});
+
 // ─── Start Server ─────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
-    console.log('');
-    console.log('🚀 Multi-Agent Orchestrator Server running!');
-    console.log(`   REST API:  http://localhost:${PORT}/api`);
-    console.log(`   WebSocket: ws://localhost:${PORT}/ws`);
-    console.log(`   Health:    http://localhost:${PORT}/api/health`);
-    console.log('');
-    console.log(`🔑 OpenAI API:  ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ NOT configured'}`);
-    console.log(`📧 Gmail API:   ${isEmailConfigured() ? '✅ Configured' : '⚠️  Not configured (email tools disabled)'}`);
-    console.log(`📅 Calendar API: ${isCalendarConfigured() ? '✅ Configured' : '⚠️  Not configured (calendar tools disabled)'}`);
-    console.log(`✅ Tasks API:    ${isTasksConfigured() ? '✅ Configured' : '⚠️  Not configured (tasks tools disabled)'}`);
-    console.log(`📰 News:        ✅ Ready (no API key needed)`);
-    console.log(`🔍 Web Search:  ✅ Ready (no API key needed)`);
-    console.log('');
+    logger.info('server.started', {
+      port: PORT,
+      frontendUrl: FRONTEND_URL,
+      openaiConfigured: !!process.env.OPENAI_API_KEY,
+      emailConfigured: isEmailConfigured(),
+      calendarConfigured: isCalendarConfigured(),
+      tasksConfigured: isTasksConfigured(),
+    });
 });
 
 export default app;

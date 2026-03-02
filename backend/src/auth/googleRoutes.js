@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { encryptSecret } from '../utils/tokenCrypto.js';
 import { upsertUserByGoogleSub, upsertGoogleTokens, createSession, deleteSession, getGoogleTokensByUserId } from '../db/db.js';
 import { SESSION_COOKIE, getSessionIdFromReq } from './session.js';
+import { logger } from '../utils/logger.js';
 
 const OAUTH_STATE_COOKIE = 'sk_oauth_state';
 const OAUTH_RETURN_COOKIE = 'sk_oauth_return';
@@ -128,7 +129,7 @@ export const googleAuthRouter = () => {
       });
 
       const session = await createSession({ userId });
-      console.log('[OAuthCallback] Created session for user:', {
+      logger.info('oauth.callback.sessionCreated', {
         userId,
         email: profile.email,
         sessionId: session.id,
@@ -148,7 +149,7 @@ export const googleAuthRouter = () => {
 
       return res.redirect(returnTo);
     } catch (err) {
-      console.error('[OAuthCallback] Error:', err);
+      logger.error('oauth.callback.error', { error: err.message });
       return res.status(500).send(`OAuth callback failed: ${err.message}`);
     }
   });

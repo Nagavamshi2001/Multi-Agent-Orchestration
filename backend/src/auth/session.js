@@ -1,4 +1,5 @@
 import { getUserBySessionId } from '../db/db.js';
+import { logger } from '../utils/logger.js';
 
 export const SESSION_COOKIE = 'sk_session';
 
@@ -27,18 +28,19 @@ export const getSessionIdFromReq = (req) => {
 export const attachUser = async (req, _res, next) => {
   const sessionId = getSessionIdFromReq(req);
   if (!sessionId) {
-    console.log('[Session] No sk_session cookie on request');
+    logger.debug('session.attach.none', { path: req.path, method: req.method });
     req.user = null;
     req.sessionId = null;
     return next();
   }
-  console.log('[Session] Found sk_session cookie:', sessionId);
+  logger.debug('session.attach.found', { sessionId, path: req.path, method: req.method });
   const user = await getUserBySessionId(sessionId);
   if (!user) {
-    console.log('[Session] No active user for session id (may be expired or missing in DB):', sessionId);
+    logger.info('session.attach.user.miss', { sessionId });
   } else {
-    console.log('[Session] Attached user from session:', {
-      id: user.id,
+    logger.debug('session.attach.user.hit', {
+      sessionId,
+      userId: user.id,
       email: user.email,
       name: user.name,
     });

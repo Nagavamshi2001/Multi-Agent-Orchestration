@@ -97,7 +97,7 @@ Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
 | Backend | Node.js, Express, WebSocket (ws) |
 | Google APIs | Gmail API, Google Calendar API, Google Tasks API |
 | Authentication | Google OAuth2 |
-| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages |
+| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, chat_metrics |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 | News | gnews (Google News RSS) |
@@ -108,7 +108,7 @@ Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
 ## Deliverables
 
 1. **Backend** — REST API and WebSocket server with orchestrator and six sub-agents; SQLite-backed user and chat history persistence
-2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, and History panel to browse and reopen past conversations
+2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, and History panel to browse and reopen past conversations; inline thumbs-up/down feedback for assistant responses
 3. **Documentation** — README, setup instructions, and this project summary
 4. **Configuration** — Environment template for API keys and OAuth credentials
 
@@ -117,13 +117,13 @@ Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
 ## Future Work
 
 - Migrate to PostgreSQL or another production database for larger-scale deployment
-- Implement multi-user support with session management
+- Extend multi-user support (currently based on secure auth sessions and cookies) with more granular roles/permissions
 - Add more Google Workspace integrations (e.g., Google Drive, Google Keep)
-- Improve error handling and rate limiting for production use
-- Add evaluation metrics (accuracy, latency, user satisfaction) for assessment
+- Further harden error handling, rate limiting, and observability for production scale
+- Enhance evaluation metrics (e.g., per-agent success rates, richer user satisfaction surveys) for assessment
 
 ---
 
 ## Conclusion
 
-This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in SQLite, enabling users to revisit and continue past conversations via the History panel. The architecture is extensible, allowing new agents to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.
+This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in SQLite, enabling users to revisit and continue past conversations via the History panel. Robust session management, improved error handling, request rate limiting, structured logging, and evaluation metrics (latency and user feedback) bring the system closer to production-grade quality. The architecture is extensible, allowing new agents and UI features to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.

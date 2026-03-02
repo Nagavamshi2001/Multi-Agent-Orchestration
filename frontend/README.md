@@ -70,15 +70,31 @@ VITE_WS_URL=wss://your-backend.example.com/ws
 
 ## How it works (high level)
 
-- **ChatInterface.vue** – main orchestrator; composes sub‑components and manages state, WebSocket, and handlers.
-- **ChatHeader.vue** – logo, auth (login/logout), History button, status pill, Clear button.
-- **EmptyState.vue** – empty state with suggestion chips when there are no messages.
-- **ChatInput.vue** – textarea and send button with auto‑resize.
-- **MessageBubble.vue** – individual message with agent badge, traces, and markdown formatting.
-- **LoginModal.vue** – sign‑in prompt with Google login.
-- **HistoryDrawer.vue** – panel to browse, open, and manage past chat sessions (requires auth).
-- **ErrorToast.vue** – dismissible error notification.
-- **src/services/api.js** – Axios wrapper for backend (`/api/health`, `/api/chat`, `/api/chat/sessions/*`, `/api/auth/*`).
-- A WebSocket connection streams messages and traces from the orchestrator in real time.
+- **ChatInterface.vue**
+  - Main orchestrator of the UI
+  - Manages messages, input state, WebSocket lifecycle, and history loading
+  - Calls backend REST APIs (`/api/chat`, `/api/chat/sessions/*`, `/api/metrics/*`) and pushes metrics/feedback
+- **ChatHeader.vue**
+  - Logo, title, auth (login/logout)
+  - History drawer toggle, status pill, Clear button
+- **EmptyState.vue**
+  - Empty state with suggestion chips when there are no messages
+- **ChatInput.vue**
+  - Textarea and send button with auto‑resize
+- **MessageBubble.vue**
+  - Individual message with agent badge
+  - Shows streaming “thinking” status, execution traces, markdown‑formatted content, latency, and feedback controls
+- **FeedbackControls.vue**
+  - Reusable thumbs up/down UI for assistant messages
+  - Emits feedback events that the parent uses to call `/api/metrics/feedback`
+- **LoginModal.vue**
+  - Sign‑in prompt with Google login
+- **HistoryDrawer.vue**
+  - Panel to browse, open, and manage past chat sessions (requires auth)
+- **ErrorToast.vue**
+  - Dismissible error notification for HTTP / WebSocket / feedback errors
+- **src/services/api.js**
+  - Axios wrapper for backend (`/api/health`, `/api/chat`, `/api/chat/sessions/*`, `/api/metrics/*`, `/api/auth/*`)
+- A WebSocket connection streams messages and traces from the orchestrator in real time; the REST API is used for history and metrics.
 
 For overall system architecture, see the root `README.md`.

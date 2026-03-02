@@ -11,13 +11,14 @@ import { parseCookies, SESSION_COOKIE } from '../auth/session.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
 import { getHistory, addToHistory, formatHistory } from '../chat/conversationMemory.js';
+import { logger } from '../utils/logger.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', async (ws, req) => {
     const sessionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    console.log(`[WebSocket] New connection: ${sessionId}`);
+    logger.info('ws.connection.open', { sessionId });
 
     // Resolve user once on connection (cookie sent during WS upgrade)
     let wsUser = null;
@@ -28,12 +29,29 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
       if (sid) {
         wsUser = await getUserBySessionId(sid);
         wsUserId = wsUser?.id || null;
+        logger.debug('ws.connection.user', { sessionId, userId: wsUserId });
       }
     } catch {
       wsUserId = null;
     }
 
+    // Per-connection rate limiting (simple sliding window)
+    const WS_WINDOW_MS = 10_000; // 10 seconds
+    const WS_MAX_MESSAGES = 10;
+    let messageTimestamps = [];
+
     ws.on('message', async (data) => {
+      const nowTs = Date.now();
+      const windowStart = nowTs - WS_WINDOW_MS;
+      messageTimestamps = messageTimestamps.filter((t) => t >= windowStart);
+
+      if (messageTimestamps.length >= WS_MAX_MESSAGES) {
+        logger.warn('ws.rate_limited', { sessionId, userId: wsUserId });
+        ws.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded, please slow down.' }));
+        return;
+      }
+      messageTimestamps.push(nowTs);
+
       let payload;
       try {
         payload = JSON.parse(data.toString());
@@ -61,7 +79,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
 
         let history = null;
         if (wsUserId) {
-          console.log('[ChatWS] Using DB-backed history for user:', wsUserId, 'session:', clientSessionId);
+          logger.debug('ws.chat.history.db', { userId: wsUserId, sessionId: clientSessionId });
           await ensureChatSession({ chatSessionId: clientSessionId, userId: wsUserId });
           await addChatMessage({
             chatSessionId: clientSessionId,
@@ -215,7 +233,11 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         const finalAgentName = result.lastAgent?.name || lastAgentName;
 
         if (wsUserId) {
-          console.log('[ChatWS] Saving assistant reply to DB for user:', wsUserId, 'session:', clientSessionId);
+          logger.debug('ws.chat.message.persist', {
+            userId: wsUserId,
+            sessionId: clientSessionId,
+            agentName: finalAgentName,
+          });
           await addChatMessage({
             chatSessionId: clientSessionId,
             userId: wsUserId,
@@ -236,13 +258,17 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           })
         );
       } catch (err) {
-        console.error('[WebSocket] Error:', err);
+        logger.error('ws.chat.error', {
+          sessionId,
+          userId: wsUserId,
+          error: err.message,
+        });
         ws.send(JSON.stringify({ type: 'error', message: err.message }));
       }
     });
 
     ws.on('close', () => {
-      console.log(`[WebSocket] Disconnected: ${sessionId}`);
+      logger.info('ws.connection.close', { sessionId, userId: wsUserId });
     });
 
     ws.send(

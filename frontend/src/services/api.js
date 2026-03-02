@@ -62,4 +62,20 @@ export const logout = async () => {
     return data;
 };
 
+export const sendMetricsFeedback = async ({ chatSessionId, latencyMs, rating, helpful, feedbackText }) => {
+    const { data } = await api.post('/api/metrics/feedback', {
+        chatSessionId,
+        latencyMs,
+        rating,
+        helpful,
+        feedbackText,
+    });
+    return data;
+};
+
+export const getMetricsSummary = async () => {
+    const { data } = await api.get('/api/metrics/summary');
+    return data;
+};
+
 export default api;
