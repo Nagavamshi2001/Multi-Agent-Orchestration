@@ -45,6 +45,6 @@ services:
       - key: NODE_VERSION
         value: "20"
       - key: VITE_API_URL
-        value: https://multi-agent-backend.onrender.com
+        value: https://multi-agent-backend-fxrw.onrender.com
       - key: VITE_WS_URL
-        value: wss://multi-agent-backend.onrender.com/ws
+        value: wss://multi-agent-backend-fxrw.onrender.com/ws
