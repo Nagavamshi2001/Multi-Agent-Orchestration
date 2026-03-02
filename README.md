@@ -152,17 +152,40 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 | `GET` | `/api/chat/sessions/:id/messages` | Get messages for a session |
 | `PATCH` | `/api/chat/sessions/:id` | Rename session |
 | `DELETE` | `/api/chat/sessions/:id` | Delete session |
+| `GET` | `/api/auth/me` | Current authenticated user |
+| `POST` | `/api/auth/logout` | Logout |
+| `GET` | `/api/auth/google/start` | Start Google OAuth2 login |
+| `GET` | `/api/auth/google/callback` | OAuth2 callback |
+| `GET` | `/api/mcp/servers` | List configured MCP servers (`mcp.config.json`) |
+| `POST` | `/api/mcp/servers` | Add or update an MCP server entry |
+| `GET` | `/api/settings` | User settings (model, OpenAI key presence) — auth required |
+| `PUT` | `/api/settings` | Update user settings (e.g. OpenAI key override, model) — auth required |
 | `POST` | `/api/metrics/feedback` | Store latency + optional rating/helpful/feedback for a chat session |
 | `GET` | `/api/metrics/summary` | Summary metrics (total, avg latency, avg rating) for current user |
 | `WS` | `/ws` | WebSocket chat connection with streaming traces |
 
 ---
 
+## MCP (Model Context Protocol)
+
+The backend can run as an **MCP server** over stdio for tool exposure (e.g. to Cursor or other MCP clients):
+
+```bash
+cd backend
+npm run mcp
+```
+
+Tool definitions live in `backend/src/tools/registry.js`; `backend/src/mcp/registerTools.js` registers them with the MCP server. The frontend **Integrations** panel and `GET/POST /api/mcp/servers` let you list and configure MCP server entries (stored in `backend/mcp.config.json`).
+
+---
+
 ## Adding More Sub-Agents
 
 1. Create `backend/src/agents/<name>Agent.js` (model it after `emailAgent.js` or `calendarAgent.js`)
-2. Import and add it to the `handoffs` array in `backend/src/agents/orchestrator.js`
-3. Update the orchestrator's system instructions to mention the new agent
+2. Add tool definitions in `backend/src/tools/registry.js` and implement in `backend/src/tools/<name>Tools.js`
+3. Import and add the agent to the `handoffs` array in `backend/src/agents/orchestrator.js`
+4. Update the orchestrator's system instructions to mention the new agent
+5. Optionally register tools in `backend/src/mcp/registerTools.js` for MCP exposure
 
 ---
 
@@ -171,11 +194,12 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 | Layer | Technology |
 |-------|------------|
 | AI Agents | OpenAI Agents SDK (`@openai/agents`), GPT-4o |
+| MCP | Model Context Protocol (`@modelcontextprotocol/sdk`) — stdio server, tool bridge |
 | Google APIs | Gmail, Calendar, Tasks (OAuth2) |
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape |
 | Backend | Node.js, Express, WebSocket (ws) |
-| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages |
+| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, user_settings |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 

@@ -9,10 +9,16 @@ const baseFields = () => ({
   env: process.env.NODE_ENV || 'development',
 });
 
+const GREEN = '\x1b[32m';
+const RESET = '\x1b[0m';
+
 const format = (level, msg, ctx) => {
   const meta = { ...baseFields(), level, msg, ...ctx };
   const { ts, env, ...rest } = meta;
-  const parts = Object.entries(rest).map(([k, v]) => `${k}=${String(v)}`);
+  const parts = Object.entries(rest).map(([k, v]) => {
+    const val = String(v);
+    return k === 'msg' ? `${k}=${GREEN}${val}${RESET}` : `${k}=${val}`;
+  });
   return `[${ts}] [${env}] ${parts.join(' ')}`;
 };
 

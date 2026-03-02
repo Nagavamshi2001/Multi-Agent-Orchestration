@@ -1,15 +1,5 @@
 <template>
   <div class="chat-interface">
-    <ChatHeader
-      :me="me"
-      :status-class="statusClass"
-      :status-label="statusLabel"
-      @login="loginWithGoogle"
-      @logout="doLogout"
-      @toggle-history="toggleHistory"
-      @clear="clearChat"
-    />
-
     <main class="messages-area" ref="messagesEnd">
       <EmptyState v-if="messages.length === 0" @suggestion="useSuggestion" />
       <div v-else class="messages-list">
@@ -47,9 +37,8 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue';
+import { ref, nextTick, onMounted, watch, defineExpose } from 'vue';
 import MessageBubble from './MessageBubble.vue';
-import ChatHeader from './ChatHeader.vue';
 import EmptyState from './EmptyState.vue';
 import ChatInput from './ChatInput.vue';
 import LoginModal from './LoginModal.vue';
@@ -354,13 +343,23 @@ onMounted(async () => {
     refreshHistory().catch(() => {});
   }
 });
+
+defineExpose({
+  loginWithGoogle,
+  doLogout,
+  toggleHistory,
+  clearChat,
+  statusClass,
+  statusLabel,
+  me,
+});
 </script>
 
 <style scoped>
 .chat-interface {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   background: var(--color-bg);
   position: relative;
   overflow: hidden;

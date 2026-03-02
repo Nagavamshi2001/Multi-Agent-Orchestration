@@ -24,3 +24,4 @@ export {
   getChatMessagesForAgentContext,
 } from './chatSessions.js';
 export { recordChatMetric, getMetricsSummary } from './metrics.js';
+export { getSettings, getSettingsWithKey, upsertSettings } from './userSettings.js';

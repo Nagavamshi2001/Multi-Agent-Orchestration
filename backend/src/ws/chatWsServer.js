@@ -1,6 +1,6 @@
 import { WebSocketServer } from 'ws';
-import { run } from '@openai/agents';
-import orchestratorAgent from '../agents/orchestrator.js';
+import { createOrchestratorAgent } from '../agents/orchestrator.js';
+import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
 import {
   getUserBySessionId,
   ensureChatSession,
@@ -67,8 +67,9 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         return;
       }
 
-      if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
-        ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured.' }));
+      const openaiConfig = resolveOpenAIConfig(wsUserId, developerMode);
+      if (!openaiConfig.apiKey) {
+        ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured. Set it in Settings or in server .env.' }));
         return;
       }
 
@@ -105,9 +106,16 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           userEmail: wsUser?.email,
           developerMode,
         });
+        const requestContext = { userId: wsUserId, developerMode, ...googleCtx };
+        logger.debug('ws.chat.request_context', {
+          userId: wsUserId,
+          hasGoogleToken: !!requestContext.googleRefreshToken,
+          developerMode,
+        });
+        const orchestratorAgent = createOrchestratorAgent(requestContext);
         const result = await runWithContext(
-          { userId: wsUserId, developerMode, ...googleCtx },
-          async () => await run(orchestratorAgent, agentInput, { stream: true })
+          requestContext,
+          async () => await runAgent(orchestratorAgent, agentInput, { userId: wsUserId, stream: true, developerMode })
         );
 
         let lastAgentName = orchestratorAgent.name;

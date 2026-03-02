@@ -45,6 +45,8 @@ There is a need for a **single conversational interface** that understands inten
 - Natural language intent routing via LLM orchestrator
 - Real-time WebSocket chat interface
 - Persistent chat history (user data and session messages stored in SQLite; History UI to browse and reopen past conversations)
+- MCP (Model Context Protocol) server over stdio for tool exposure; API to list/update MCP server config
+- User settings (e.g. OpenAI API key override, model choice) persisted per user; Settings panel in the UI
 
 ### Out of Scope
 - Multi-user authentication beyond single-account OAuth
@@ -65,6 +67,8 @@ There is a need for a **single conversational interface** that understands inten
 | **Natural Language** | All interactions via conversational prompts; no rigid command syntax |
 | **Chat History** | Persistent storage of conversations; users can view, reopen, and continue past sessions via the History panel |
 | **Personalisation** | All Google services use the authenticated user’s own data |
+| **MCP** | Backend runs as MCP server (stdio); tools from registry exposed via MCP; UI Integrations panel to manage MCP server config |
+| **User Settings** | Per-user settings (OpenAI key override, model selection) stored in SQLite; Settings panel in the UI |
 
 ---
 
@@ -75,7 +79,7 @@ User → Vue.js Chat UI (Port 5173)
         ↓ HTTP REST / WebSocket
 Node.js Express Server (Port 3001)
         ↓
-SQLite (sql.js) — users, chat_sessions, chat_messages
+SQLite (sql.js) — users, chat_sessions, chat_messages, user_settings
         ↓
 Orchestrator Agent (GPT-4o)
         ↓ handoff()
@@ -85,6 +89,9 @@ Email    Calendar  Tasks   News   Search
 Agent    Agent     Agent   Agent  Agent
    ↓         ↓        ↓        ↓
 Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
+
+MCP: backend/src/mcp/server.js (stdio) ←→ tools/registry.js → registerTools → MCP clients (e.g. Cursor)
+API: GET/POST /api/mcp/servers (mcp.config.json); GET/PUT /api/settings (user_settings)
 ```
 
 ---
@@ -97,20 +104,21 @@ Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
 | Backend | Node.js, Express, WebSocket (ws) |
 | Google APIs | Gmail API, Google Calendar API, Google Tasks API |
 | Authentication | Google OAuth2 |
-| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, chat_metrics |
+| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, chat_metrics, user_settings |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape (DuckDuckGo) |
+| MCP | @modelcontextprotocol/sdk — stdio server, tool registry, tool bridge for agents |
 
 ---
 
 ## Deliverables
 
-1. **Backend** — REST API and WebSocket server with orchestrator and six sub-agents; SQLite-backed user and chat history persistence
-2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, and History panel to browse and reopen past conversations; inline thumbs-up/down feedback for assistant responses
-3. **Documentation** — README, setup instructions, and this project summary
-4. **Configuration** — Environment template for API keys and OAuth credentials
+1. **Backend** — REST API and WebSocket server with orchestrator and five sub-agents (Email, Calendar, Tasks, News, Search); SQLite-backed user and chat history; MCP stdio server and `/api/mcp/servers` for MCP config; `/api/settings` for per-user settings (OpenAI key, model)
+2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, History panel to browse and reopen past conversations, Integrations panel for MCP servers, Settings panel for user preferences; inline thumbs-up/down feedback for assistant responses
+3. **Documentation** — Root README, backend and frontend READMEs, setup instructions, and this project summary
+4. **Configuration** — Environment template for API keys and OAuth credentials; `mcp.config.json` for MCP server entries
 
 ---
 
@@ -126,4 +134,4 @@ Gmail API  Cal API  Tasks API  gnews  duck-duck-scrape
 
 ## Conclusion
 
-This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in SQLite, enabling users to revisit and continue past conversations via the History panel. Robust session management, improved error handling, request rate limiting, structured logging, and evaluation metrics (latency and user feedback) bring the system closer to production-grade quality. The architecture is extensible, allowing new agents and UI features to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.
+This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in SQLite, enabling users to revisit and continue past conversations via the History panel. The backend exposes the same tool set via **MCP (Model Context Protocol)** over stdio for use by MCP clients (e.g. Cursor), with an API and Integrations panel to manage MCP server configuration. Per-user **settings** (e.g. OpenAI key override, model choice) are stored in SQLite and editable in the Settings panel. Robust session management, improved error handling, request rate limiting, structured logging, and evaluation metrics (latency and user feedback) bring the system closer to production-grade quality. The architecture is extensible, allowing new agents and UI features to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.

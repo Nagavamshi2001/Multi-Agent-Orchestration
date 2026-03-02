@@ -5,10 +5,12 @@ import { clampMaxResults, formatNewsArticle } from '../utils/helpers.js';
 const TOPICS = ['WORLD', 'BUSINESS', 'TECHNOLOGY', 'SCIENCE', 'ENTERTAINMENT', 'SPORTS', 'HEALTH'];
 
 export const getHeadlines = async ({ maxResults = 10, country = 'us', language = 'en' }) => {
+  const c = country ?? 'us';
+  const lang = language ?? 'en';
   try {
     const articles = await news.headlines({
-      country: country.toLowerCase(),
-      language: language.toLowerCase(),
+      country: typeof c === 'string' ? c.toLowerCase() : 'us',
+      language: typeof lang === 'string' ? lang.toLowerCase() : 'en',
       n: clampMaxResults(maxResults, 20),
     });
 
@@ -28,12 +30,13 @@ export const searchNews = async ({ query, maxResults = 10, country = 'us', langu
   if (!query || !query.trim()) {
     return toolError('Search query is required.');
   }
-
+  const c = country ?? 'us';
+  const lang = language ?? 'en';
   try {
     const q = query.trim();
     const articles = await news.search(q, {
-      country: country.toLowerCase(),
-      language: language.toLowerCase(),
+      country: typeof c === 'string' ? c.toLowerCase() : 'us',
+      language: typeof lang === 'string' ? lang.toLowerCase() : 'en',
       n: clampMaxResults(maxResults, 20),
     });
 
@@ -62,11 +65,12 @@ export const getNewsByTopic = async ({
       error: `Invalid topic. Use one of: ${TOPICS.join(', ')}`,
     });
   }
-
+  const c = country ?? 'us';
+  const lang = language ?? 'en';
   try {
     const articles = await news.topic(normalized, {
-      country: country.toLowerCase(),
-      language: language.toLowerCase(),
+      country: typeof c === 'string' ? c.toLowerCase() : 'us',
+      language: typeof lang === 'string' ? lang.toLowerCase() : 'en',
       n: Math.min(maxResults, 20),
     });
 
@@ -97,12 +101,13 @@ export const getNewsByLocation = async ({
   if (!location || !location.trim()) {
     return toolError('Location is required (e.g., "New York", "London").');
   }
-
+  const c = country ?? 'us';
+  const lang = language ?? 'en';
   try {
     const loc = location.trim();
     const articles = await news.geo(loc, {
-      country: country.toLowerCase(),
-      language: language.toLowerCase(),
+      country: typeof c === 'string' ? c.toLowerCase() : 'us',
+      language: typeof lang === 'string' ? lang.toLowerCase() : 'en',
       n: clampMaxResults(maxResults, 20),
     });
 

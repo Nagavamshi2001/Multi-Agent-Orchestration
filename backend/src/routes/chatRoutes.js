@@ -1,6 +1,6 @@
 import express from 'express';
-import { run } from '@openai/agents';
 import orchestratorAgent from '../agents/orchestrator.js';
+import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
 import {
   createChatSession,
   ensureChatSession,
@@ -130,9 +130,10 @@ export const chatRouter = ({ developerMode }) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'sk-your-openai-api-key-here') {
+    const openaiConfig = resolveOpenAIConfig(req.user?.id ?? null, developerMode);
+    if (!openaiConfig.apiKey) {
       return res.status(500).json({
-        error: 'OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.',
+        error: 'OpenAI API key not configured. Set it in Settings or in server .env.',
       });
     }
 
@@ -176,7 +177,7 @@ export const chatRouter = ({ developerMode }) => {
       });
       const result = await runWithContext(
         { userId: req.user?.id || null, developerMode, ...googleCtx },
-        async () => await run(orchestratorAgent, agentInput)
+        async () => await runAgent(orchestratorAgent, agentInput, { userId: req.user?.id ?? null, developerMode })
       );
 
       const latencyMs = Date.now() - start;

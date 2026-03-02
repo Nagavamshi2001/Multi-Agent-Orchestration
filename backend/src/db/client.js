@@ -121,6 +121,15 @@ const initSchema = () => {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
     );
     CREATE INDEX IF NOT EXISTS idx_chat_metrics_user_created ON chat_metrics(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      user_id TEXT PRIMARY KEY,
+      openai_key_enc TEXT,
+      openai_model TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 };
 
