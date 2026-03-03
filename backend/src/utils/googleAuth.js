@@ -4,6 +4,13 @@ import { getContext } from '../auth/requestContext.js';
 const PLAYGROUND_REDIRECT_URI = 'https://developers.google.com/oauthplayground';
 const bool = (v) => ['1', 'true', 'yes', 'on'].includes(String(v || '').toLowerCase());
 
+/** Normalize expiry to milliseconds (Google may return seconds in some flows). */
+function normalizeExpiryMs(value) {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  const n = Number(value);
+  return n > 0 && n < 1e12 ? n * 1000 : n;
+}
+
 const isDeveloperMode = () => {
   const ctx = getContext?.() || {};
   if (typeof ctx.developerMode === 'boolean') return ctx.developerMode;
@@ -27,6 +34,7 @@ export const getGoogleUserEmail = () => {
 
 /**
  * Create OAuth2 client (shared by Gmail, Calendar, Tasks).
+ * Uses stored access token + expiry from context when available so API calls don't refresh every time.
  * @returns {google.auth.OAuth2}
  */
 export const createOAuth2Client = () => {
@@ -37,8 +45,18 @@ export const createOAuth2Client = () => {
   );
 
   const refreshToken = getGoogleRefreshToken();
+  const ctx = getContext?.() || {};
+  const accessToken = ctx.googleAccessToken || null;
+  const expiryDate = normalizeExpiryMs(ctx.googleTokenExpiry);
+
   if (refreshToken) {
-    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    const credentials = { refresh_token: refreshToken };
+    const now = Date.now();
+    if (accessToken && expiryDate != null && expiryDate > now) {
+      credentials.access_token = accessToken;
+      credentials.expiry_date = expiryDate;
+    }
+    oauth2Client.setCredentials(credentials);
   }
   return oauth2Client;
 };

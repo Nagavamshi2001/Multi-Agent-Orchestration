@@ -34,17 +34,20 @@ export const upsertGoogleTokens = async ({
   accessTokenEnc,
   expiryDate,
 }) => {
-  const existing = queryOne('SELECT user_id, refresh_token_enc FROM google_tokens WHERE user_id = ?;', [userId]);
+  const existing = queryOne(
+    'SELECT user_id, refresh_token_enc, scope, token_type, access_token_enc, expiry_date FROM google_tokens WHERE user_id = ?;',
+    [userId]
+  );
   const ts = nowMs();
   if (existing?.user_id) {
     exec(
       'UPDATE google_tokens SET refresh_token_enc = ?, scope = ?, token_type = ?, access_token_enc = ?, expiry_date = ?, updated_at = ? WHERE user_id = ?;',
       [
-        refreshTokenEnc || existing.refresh_token_enc,
-        scope || null,
-        tokenType || null,
-        accessTokenEnc || null,
-        expiryDate || null,
+        refreshTokenEnc ?? existing.refresh_token_enc,
+        scope ?? existing.scope ?? null,
+        tokenType ?? existing.token_type ?? null,
+        accessTokenEnc ?? existing.access_token_enc ?? null,
+        expiryDate ?? existing.expiry_date ?? null,
         ts,
         userId,
       ]

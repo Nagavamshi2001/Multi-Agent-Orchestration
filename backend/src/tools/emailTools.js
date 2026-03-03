@@ -1,8 +1,5 @@
-import nodemailer from 'nodemailer';
 import {
-  createOAuth2Client,
   getGmailClient,
-  getGoogleRefreshToken,
   getGoogleUserEmail,
   isEmailConfigured,
 } from '../utils/googleAuth.js';
@@ -11,6 +8,28 @@ import { toolSuccess, toolError, toolEmpty } from '../utils/toolResponse.js';
 import { clampMaxResults } from '../utils/helpers.js';
 
 export { isEmailConfigured };
+
+/** Build RFC 2822 MIME message and return base64url-encoded raw for Gmail API. */
+function buildRawMessage({ fromEmail, to, subject, text, cc = '', bcc = '' }) {
+  const lines = [];
+  const rfc2822Date = new Date().toUTCString().replace('GMT', '+0000');
+  lines.push(`From: <${fromEmail}>`);
+  lines.push(`To: ${to}`);
+  lines.push(`Subject: ${subject.replace(/\r?\n/g, ' ')}`);
+  if (cc && cc.trim()) lines.push(`Cc: ${cc.trim()}`);
+  if (bcc && bcc.trim()) lines.push(`Bcc: ${bcc.trim()}`);
+  lines.push(`Date: ${rfc2822Date}`);
+  lines.push('MIME-Version: 1.0');
+  lines.push('Content-Type: text/plain; charset=UTF-8');
+  lines.push('');
+  lines.push(text || '');
+  const raw = lines.join('\r\n');
+  return Buffer.from(raw, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
 
 // ─── Tool: Read Unread Emails ─────────────────────────────────────────────────
 export const readUnreadEmails = async ({ maxResults = 10 }) => {
@@ -63,6 +82,7 @@ export const readUnreadEmails = async ({ maxResults = 10 }) => {
 };
 
 // ─── Tool: Send Email ─────────────────────────────────────────────────────────
+// Uses Gmail API (same OAuth as read/search) to avoid SMTP 535 issues.
 export const sendEmail = async ({ to, subject, body, cc = '', bcc = '' }) => {
   if (!isEmailConfigured()) {
     return toolError(
@@ -71,39 +91,31 @@ export const sendEmail = async ({ to, subject, body, cc = '', bcc = '' }) => {
     );
   }
 
+  const userEmail = getGoogleUserEmail();
+  if (!userEmail?.trim()) {
+    return toolError(
+      'No sending email in session. Sign in again with Google so we can send from your account.'
+    );
+  }
+
   try {
-    const auth = createOAuth2Client();
-    const accessTokenRes = await auth.getAccessToken();
-    const accessToken = accessTokenRes.token;
-    const userEmail = getGoogleUserEmail();
-    const refreshToken = getGoogleRefreshToken();
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        type: 'OAuth2',
-        user: userEmail,
-        clientId: process.env.GMAIL_CLIENT_ID,
-        clientSecret: process.env.GMAIL_CLIENT_SECRET,
-        refreshToken,
-        accessToken,
-      },
-    });
-
-    const mailOptions = {
-      from: `Me <${userEmail}>`,
+    const gmail = getGmailClient();
+    const raw = buildRawMessage({
+      fromEmail: userEmail,
       to,
-      subject,
-      text: body,
-      ...(cc && { cc }),
-      ...(bcc && { bcc }),
-    };
-
-    const result = await transporter.sendMail(mailOptions);
+      subject: subject || '(No subject)',
+      text: body || '',
+      cc,
+      bcc,
+    });
+    const res = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: { raw },
+    });
     return toolSuccess({
       success: true,
       message: `Email sent successfully to ${to}`,
-      messageId: result.messageId,
+      messageId: res.data.id,
     });
   } catch (err) {
     console.error('[sendEmail] Error:', err.message);
