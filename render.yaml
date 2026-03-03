@@ -32,6 +32,8 @@ services:
         generateValue: true
       - key: DEVELOPER_MODE
         value: "false"
+      - key: MCP_TOOL_TIMEOUT_MS
+        value: "120000"
 
   # Vue static frontend (build-time env points to backend URL)
   - type: web
