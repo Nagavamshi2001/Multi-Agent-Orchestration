@@ -44,6 +44,9 @@ export async function getMcpClient() {
   return clientPromise;
 }
 
+/** Default MCP tool call timeout (ms). SDK default is 60s; slow tools (e.g. send_email with OAuth + Gmail) need more. */
+const MCP_TOOL_TIMEOUT_MS = Number(process.env.MCP_TOOL_TIMEOUT_MS) || 120_000;
+
 /**
  * Call a tool by name on the MCP server. Used by agent tool execute handlers.
  * @param {string} name - Tool name (e.g. 'send_email', 'list_upcoming_events')
@@ -53,10 +56,14 @@ export async function getMcpClient() {
 export async function callMcpTool(name, args) {
   try {
     const client = await getMcpClient();
-    const result = await client.callTool({
-      name,
-      arguments: args ?? {},
-    });
+    const result = await client.callTool(
+      {
+        name,
+        arguments: args ?? {},
+      },
+      undefined,
+      { timeout: MCP_TOOL_TIMEOUT_MS }
+    );
     const content = result?.content;
     if (Array.isArray(content) && content.length > 0) {
       const textPart = content.find((c) => c.type === 'text');
