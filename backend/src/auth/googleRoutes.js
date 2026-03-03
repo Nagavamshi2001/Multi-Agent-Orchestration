@@ -1,6 +1,6 @@
 import express from 'express';
 import { google } from 'googleapis';
-import crypto from 'crypto';
+import { ObjectId } from 'mongodb';
 import { encryptSecret } from '../utils/tokenCrypto.js';
 import { upsertUserByGoogleSub, upsertGoogleTokens, createSession, deleteSession, getGoogleTokensByUserId } from '../db/db.js';
 import { SESSION_COOKIE, getSessionIdFromReq } from './session.js';
@@ -59,7 +59,7 @@ export const googleAuthRouter = () => {
       return res.status(500).json({ error: 'Missing TOKEN_ENCRYPTION_KEY in backend .env (required to store refresh tokens)' });
     }
 
-    const state = crypto.randomUUID();
+    const state = new ObjectId().toString();
     const returnTo = (req.query.returnTo && String(req.query.returnTo)) || getFrontendUrl();
 
     res.cookie(OAUTH_STATE_COOKIE, state, {

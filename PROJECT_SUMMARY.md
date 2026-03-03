@@ -8,7 +8,7 @@
 
 ## Abstract
 
-This project presents a **Personalised Multi-Agent Orchestration System** that integrates Large Language Model (LLM)–based AI agents with the Google ecosystem. The system enables users to manage their productivity tools—email, calendar, tasks—through natural language interaction, alongside auxiliary capabilities such as news retrieval and web search. A central orchestrator agent intelligently routes user requests to specialised sub-agents, each responsible for a specific domain. The system leverages the OpenAI Agents SDK for agent design and handoff logic, Google OAuth2 for secure access to user data, SQLite for persistent user and chat history, and a modern Vue.js frontend for a conversational interface with a History panel to browse past conversations. The result is a unified, personalised assistant that streamlines daily workflow across multiple Google Workspace services.
+This project presents a **Personalised Multi-Agent Orchestration System** that integrates Large Language Model (LLM)–based AI agents with the Google ecosystem. The system enables users to manage their productivity tools—email, calendar, tasks—through natural language interaction, alongside auxiliary capabilities such as news retrieval and web search. A central orchestrator agent intelligently routes user requests to specialised sub-agents, each responsible for a specific domain. The system leverages the OpenAI Agents SDK for agent design and handoff logic, Google OAuth2 for secure access to user data, MongoDB for persistent user and chat history, and a modern Vue.js frontend for a conversational interface with a History panel to browse past conversations. The result is a unified, personalised assistant that streamlines daily workflow across multiple Google Workspace services.
 
 ---
 
@@ -44,7 +44,7 @@ There is a need for a **single conversational interface** that understands inten
 - General web search
 - Natural language intent routing via LLM orchestrator
 - Real-time WebSocket chat interface
-- Persistent chat history (user data and session messages stored in SQLite; History UI to browse and reopen past conversations)
+- Persistent chat history (user data and session messages stored in MongoDB; History UI to browse and reopen past conversations)
 - MCP (Model Context Protocol) server over stdio for tool exposure; API to list/update MCP server config
 - User settings (e.g. OpenAI API key override, model choice) persisted per user; Settings panel in the UI
 
@@ -68,7 +68,7 @@ There is a need for a **single conversational interface** that understands inten
 | **Chat History** | Persistent storage of conversations; users can view, reopen, and continue past sessions via the History panel |
 | **Personalisation** | All Google services use the authenticated user’s own data |
 | **MCP** | Backend runs as MCP server (stdio); tools from registry exposed via MCP; UI Integrations panel to manage MCP server config |
-| **User Settings** | Per-user settings (OpenAI key override, model selection) stored in SQLite; Settings panel in the UI |
+| **User Settings** | Per-user settings (OpenAI key override, model selection) stored in MongoDB; Settings panel in the UI |
 
 ---
 
@@ -79,7 +79,7 @@ User → Vue.js Chat UI (Port 5173)
         ↓ HTTP REST / WebSocket
 Node.js Express Server (Port 3001)
         ↓
-SQLite (sql.js) — users, chat_sessions, chat_messages, user_settings
+MongoDB — users, google_tokens, sessions, chat_sessions, chat_messages, chat_metrics, user_settings
         ↓
 Orchestrator Agent (GPT-4o)
         ↓ handoff()
@@ -104,7 +104,7 @@ API: GET/POST /api/mcp/servers (mcp.config.json); GET/PUT /api/settings (user_se
 | Backend | Node.js, Express, WebSocket (ws) |
 | Google APIs | Gmail API, Google Calendar API, Google Tasks API |
 | Authentication | Google OAuth2 |
-| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, chat_metrics, user_settings |
+| Database | MongoDB — users, auth sessions, chat_sessions, chat_messages, chat_metrics, user_settings |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 | News | gnews (Google News RSS) |
@@ -115,16 +115,17 @@ API: GET/POST /api/mcp/servers (mcp.config.json); GET/PUT /api/settings (user_se
 
 ## Deliverables
 
-1. **Backend** — REST API and WebSocket server with orchestrator and five sub-agents (Email, Calendar, Tasks, News, Search); SQLite-backed user and chat history; MCP stdio server and `/api/mcp/servers` for MCP config; `/api/settings` for per-user settings (OpenAI key, model)
+1. **Backend** — REST API and WebSocket server with orchestrator and five sub-agents (Email, Calendar, Tasks, News, Search); MongoDB-backed user and chat history; MCP stdio server and `/api/mcp/servers` for MCP config; `/api/settings` for per-user settings (OpenAI key, model)
 2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, History panel to browse and reopen past conversations, Integrations panel for MCP servers, Settings panel for user preferences; inline thumbs-up/down feedback for assistant responses
 3. **Documentation** — Root README, backend and frontend READMEs, setup instructions, and this project summary
-4. **Configuration** — Environment template for API keys and OAuth credentials; `mcp.config.json` for MCP server entries
+4. **Configuration** — Environment template for API keys, OAuth credentials, and `MONGODB_URI`; `mcp.config.json` for MCP server entries
+5. **Evaluation metrics** — `chat_metrics` records are created only when the user submits feedback (e.g. thumbs up/down) via the UI; summary endpoint reports count, avg latency, and avg rating over those feedbacked responses
 
 ---
 
 ## Future Work
 
-- Migrate to PostgreSQL or another production database for larger-scale deployment
+- Scale MongoDB (sharding, read replicas) or consider other databases for very large-scale deployment
 - Extend multi-user support (currently based on secure auth sessions and cookies) with more granular roles/permissions
 - Add more Google Workspace integrations (e.g., Google Drive, Google Keep)
 - Further harden error handling, rate limiting, and observability for production scale
@@ -134,4 +135,4 @@ API: GET/POST /api/mcp/servers (mcp.config.json); GET/PUT /api/settings (user_se
 
 ## Conclusion
 
-This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in SQLite, enabling users to revisit and continue past conversations via the History panel. The backend exposes the same tool set via **MCP (Model Context Protocol)** over stdio for use by MCP clients (e.g. Cursor), with an API and Integrations panel to manage MCP server configuration. Per-user **settings** (e.g. OpenAI key override, model choice) are stored in SQLite and editable in the Settings panel. Robust session management, improved error handling, request rate limiting, structured logging, and evaluation metrics (latency and user feedback) bring the system closer to production-grade quality. The architecture is extensible, allowing new agents and UI features to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.
+This project demonstrates the design and implementation of a **personalised multi-agent orchestration system** that integrates LLMs with the Google environment. Users can interact with their email, calendar, and tasks—along with news and web search—through a single conversational interface. User data and chat history are persisted in MongoDB, enabling users to revisit and continue past conversations via the History panel. The backend exposes the same tool set via **MCP (Model Context Protocol)** over stdio for use by MCP clients (e.g. Cursor), with an API and Integrations panel to manage MCP server configuration. Per-user **settings** (e.g. OpenAI key override, model choice) are stored in MongoDB and editable in the Settings panel. Robust session management, improved error handling, request rate limiting, structured logging, and evaluation metrics (latency and user feedback) bring the system closer to production-grade quality. The architecture is extensible, allowing new agents and UI features to be added with minimal changes to the orchestrator. The system is suitable as a BTech minor project and provides a foundation for further research in multi-agent systems and human–AI productivity tools.

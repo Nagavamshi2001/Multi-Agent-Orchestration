@@ -3,7 +3,6 @@ import orchestratorAgent from '../agents/orchestrator.js';
 import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
 import {
   createChatSession,
-  ensureChatSession,
   addChatMessage,
   listChatSessionsByUserId,
   getChatMessagesBySessionId,
@@ -11,7 +10,6 @@ import {
   renameChatSession,
   deleteChatSessionById,
   clearChatSessionMessages,
-  recordChatMetric,
 } from '../db/db.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
@@ -130,7 +128,7 @@ export const chatRouter = ({ developerMode }) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const openaiConfig = resolveOpenAIConfig(req.user?.id ?? null, developerMode);
+    const openaiConfig = await resolveOpenAIConfig(req.user?.id ?? null, developerMode);
     if (!openaiConfig.apiKey) {
       return res.status(500).json({
         error: 'OpenAI API key not configured. Set it in Settings or in server .env.',
@@ -149,17 +147,18 @@ export const chatRouter = ({ developerMode }) => {
       const trimmed = message.trim();
 
       let history = null;
+      let effectiveSessionId = sessionId;
       if (req.user?.id) {
         logger.debug('chat.history.db', { userId: req.user.id, sessionId });
-        await ensureChatSession({ chatSessionId: sessionId, userId: req.user.id });
-        await addChatMessage({
+        const userMsg = await addChatMessage({
           chatSessionId: sessionId,
           userId: req.user.id,
           role: 'user',
           content: trimmed,
         });
+        effectiveSessionId = userMsg.sessionId || sessionId;
         history = await getChatMessagesForAgentContext({
-          chatSessionId: sessionId,
+          chatSessionId: effectiveSessionId,
           userId: req.user.id,
           limit: 20,
         });
@@ -182,7 +181,7 @@ export const chatRouter = ({ developerMode }) => {
 
       const latencyMs = Date.now() - start;
       logger.info('chat.message.completed', {
-        sessionId,
+        sessionId: effectiveSessionId,
         userId: req.user?.id || null,
         latencyMs,
       });
@@ -193,36 +192,25 @@ export const chatRouter = ({ developerMode }) => {
       if (req.user?.id) {
         logger.debug('chat.message.persist', {
           userId: req.user.id,
-          sessionId,
+          sessionId: effectiveSessionId,
           role: 'assistant',
           agentName: lastAgentName,
         });
         await addChatMessage({
-          chatSessionId: sessionId,
+          chatSessionId: effectiveSessionId,
           userId: req.user.id,
           role: 'assistant',
           content: assistantReply,
           agentName: lastAgentName,
         });
-
-        await recordChatMetric({
-          chatSessionId: sessionId,
-          userId: req.user.id,
-          latencyMs,
-        });
       } else {
         addToHistory(sessionId, 'assistant', assistantReply);
-        await recordChatMetric({
-          chatSessionId: sessionId,
-          userId: null,
-          latencyMs,
-        });
       }
 
       return res.json({
         reply: assistantReply,
         agentName: lastAgentName,
-        sessionId,
+        sessionId: effectiveSessionId,
         latencyMs,
       });
     } catch (err) {

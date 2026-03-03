@@ -1,49 +1,55 @@
-import crypto from 'crypto';
-import { exec, queryOne, nowMs, persist } from './client.js';
+import { ObjectId } from 'mongodb';
+import { getCollection, nowMs } from './client.js';
 import { logger } from '../utils/logger.js';
 
 export const createSession = async ({ userId, ttlMs }) => {
-  const id = crypto.randomUUID();
   const ts = nowMs();
   const expiresAt = ts + (ttlMs || 1000 * 60 * 60 * 24 * 7); // 7 days
-  exec('INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?);', [
-    id,
-    userId,
-    ts,
-    expiresAt,
-  ]);
-  await persist();
+  const sessions = getCollection('sessions');
+  const result = await sessions.insertOne({
+    user_id: userId,
+    created_at: ts,
+    expires_at: expiresAt,
+  });
+  const id = result.insertedId.toString();
   logger.debug('db.sessions.insert', { id, userId, expiresAt });
   return { id, expiresAt };
 };
 
 export const deleteSession = async (sessionId) => {
-  exec('DELETE FROM sessions WHERE id = ?;', [sessionId]);
-  await persist();
+  const sessions = getCollection('sessions');
+  await sessions.deleteOne({ _id: new ObjectId(sessionId) });
   logger.debug('db.sessions.delete', { sessionId });
 };
 
 export const getUserBySessionId = async (sessionId) => {
   const ts = nowMs();
-  const row = queryOne(
-    `SELECT u.id as id, u.email as email, u.name as name, u.picture as picture
-     FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.id = ? AND s.expires_at > ?;`,
-    [sessionId, ts]
-  );
-  if (!row) {
+  const sessions = getCollection('sessions');
+  const session = await sessions.findOne({
+    _id: new ObjectId(sessionId),
+    expires_at: { $gt: ts },
+  });
+  if (!session) {
     logger.debug('db.sessions.getUserBySessionId.miss', { sessionId });
-  } else {
-    logger.debug('db.sessions.getUserBySessionId.hit', { sessionId, userId: row.id, email: row.email });
+    return null;
   }
-  return row || null;
+  const users = getCollection('users');
+  const user = await users.findOne(
+    { _id: new ObjectId(session.user_id) },
+    { projection: { email: 1, name: 1, picture: 1 } }
+  );
+  if (!user) return null;
+  logger.debug('db.sessions.getUserBySessionId.hit', {
+    sessionId,
+    userId: session.user_id,
+    email: user.email,
+  });
+  return { id: session.user_id, email: user.email, name: user.name, picture: user.picture };
 };
 
 export const cleanupExpiredSessions = async () => {
   const ts = nowMs();
-  exec('DELETE FROM sessions WHERE expires_at <= ?;', [ts]);
-  await persist();
-  logger.info('db.sessions.cleanupExpired', { asOf: ts });
+  const sessions = getCollection('sessions');
+  const result = await sessions.deleteMany({ expires_at: { $lte: ts } });
+  logger.info('db.sessions.cleanupExpired', { asOf: ts, deleted: result.deletedCount });
 };
-

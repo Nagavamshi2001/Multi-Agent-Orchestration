@@ -19,10 +19,10 @@ const MODELS = [
 export const settingsRouter = () => {
   const router = express.Router();
 
-  router.get('/settings', (req, res) => {
+  router.get('/settings', async (req, res) => {
     if (!requireUser(req, res)) return;
     try {
-      const settings = getSettings(req.user.id);
+      const settings = await getSettings(req.user.id);
       const payload = {
         hasOpenaiKey: settings?.hasOpenaiKey ?? false,
         model: settings?.model ?? 'gpt-4o',
@@ -50,7 +50,7 @@ export const settingsRouter = () => {
             ? openaiApiKey.trim() || null
             : null;
       await upsertSettings(req.user.id, { openaiApiKey: keyVal, model: modelVal });
-      const updated = getSettings(req.user.id);
+      const updated = await getSettings(req.user.id);
       return res.json({
         hasOpenaiKey: updated?.hasOpenaiKey ?? false,
         model: updated?.model ?? 'gpt-4o',

@@ -30,6 +30,8 @@ services:
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
         generateValue: true
+      - key: MONGODB_URI
+        sync: false
       - key: DEVELOPER_MODE
         value: "false"
       - key: MCP_TOOL_TIMEOUT_MS

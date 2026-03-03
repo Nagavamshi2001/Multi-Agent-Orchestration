@@ -3,7 +3,6 @@ import { createOrchestratorAgent } from '../agents/orchestrator.js';
 import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
 import {
   getUserBySessionId,
-  ensureChatSession,
   addChatMessage,
   getChatMessagesForAgentContext,
 } from '../db/db.js';
@@ -67,7 +66,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         return;
       }
 
-      const openaiConfig = resolveOpenAIConfig(wsUserId, developerMode);
+      const openaiConfig = await resolveOpenAIConfig(wsUserId, developerMode);
       if (!openaiConfig.apiKey) {
         ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured. Set it in Settings or in server .env.' }));
         return;
@@ -79,17 +78,18 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         const trimmed = message.trim();
 
         let history = null;
+        let effectiveSessionId = clientSessionId;
         if (wsUserId) {
           logger.debug('ws.chat.history.db', { userId: wsUserId, sessionId: clientSessionId });
-          await ensureChatSession({ chatSessionId: clientSessionId, userId: wsUserId });
-          await addChatMessage({
+          const userMsg = await addChatMessage({
             chatSessionId: clientSessionId,
             userId: wsUserId,
             role: 'user',
             content: trimmed,
           });
+          effectiveSessionId = userMsg.sessionId || clientSessionId;
           history = await getChatMessagesForAgentContext({
-            chatSessionId: clientSessionId,
+            chatSessionId: effectiveSessionId,
             userId: wsUserId,
             limit: 20,
           });
@@ -170,7 +170,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   agentName: lastAgentName,
                   tool: toolName,
                   message: getFriendlyToolMessage(toolName),
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'handoff_requested') {
@@ -182,7 +182,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'handoff_init',
                   agentName: lastAgentName,
                   message: `Decided to route to ${targetAgent.replace(/delegate_to_/g, '').replace(/_/g, ' ')}...`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'handoff_occurred') {
@@ -193,7 +193,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'handoff',
                   agentName: targetAgentName,
                   message: `Switched to ${targetAgentName}`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'reasoning_item_created') {
@@ -217,7 +217,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'reasoning',
                   agentName: lastAgentName,
                   message: reasoningText,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'tool_output') {
@@ -230,7 +230,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   agentName: lastAgentName,
                   tool: toolName,
                   message: `Completed action: ${toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ')}`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             }
@@ -243,11 +243,11 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         if (wsUserId) {
           logger.debug('ws.chat.message.persist', {
             userId: wsUserId,
-            sessionId: clientSessionId,
+            sessionId: effectiveSessionId,
             agentName: finalAgentName,
           });
           await addChatMessage({
-            chatSessionId: clientSessionId,
+            chatSessionId: effectiveSessionId,
             userId: wsUserId,
             role: 'assistant',
             content: finalReply,
@@ -262,7 +262,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             type: 'response',
             reply: finalReply,
             agentName: finalAgentName,
-            sessionId: clientSessionId,
+            sessionId: effectiveSessionId,
           })
         );
       } catch (err) {
