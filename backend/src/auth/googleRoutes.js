@@ -17,6 +17,12 @@ const getRedirectUri = (req) => {
   return `${proto}://${req.get('host')}/api/auth/google/callback`;
 };
 
+/** True when the request is over HTTPS (e.g. behind Render's proxy). */
+const isSecureRequest = (req) => {
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  return proto === 'https';
+};
+
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
 
 /** When frontend is on a different origin (HTTPS in prod), cookies must be SameSite=None; Secure for cross-origin requests. */
@@ -52,39 +58,45 @@ export const googleAuthRouter = () => {
   const router = express.Router();
 
   router.get('/google/start', (req, res) => {
-    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
-      return res.status(500).json({ error: 'Missing GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET. Set them in the backend environment (e.g. Render Dashboard → multi-agent-backend → Environment).' });
+    try {
+      if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+        return res.status(500).json({ error: 'Missing GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET. Set them in the backend environment (e.g. Render Dashboard → multi-agent-backend → Environment).' });
+      }
+      if (!process.env.TOKEN_ENCRYPTION_KEY) {
+        return res.status(500).json({ error: 'Missing TOKEN_ENCRYPTION_KEY in backend .env (required to store refresh tokens)' });
+      }
+
+      const state = new ObjectId().toString();
+      const returnTo = (req.query.returnTo && String(req.query.returnTo)) || getFrontendUrl();
+      const secure = isSecureRequest(req);
+
+      res.cookie(OAUTH_STATE_COOKIE, state, {
+        httpOnly: true,
+        sameSite: secure ? 'none' : 'lax',
+        secure,
+        path: '/api/auth',
+        maxAge: 10 * 60 * 1000,
+      });
+      res.cookie(OAUTH_RETURN_COOKIE, returnTo, {
+        httpOnly: true,
+        sameSite: secure ? 'none' : 'lax',
+        secure,
+        path: '/api/auth',
+        maxAge: 10 * 60 * 1000,
+      });
+
+      const oauth2Client = getOAuthClient(req);
+      const url = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        prompt: 'consent',
+        scope: getScopes(),
+        state,
+      });
+      return res.redirect(url);
+    } catch (err) {
+      logger.error('oauth.start.error', { error: err.message, stack: err.stack });
+      return res.status(500).json({ error: `OAuth start failed: ${err.message}` });
     }
-    if (!process.env.TOKEN_ENCRYPTION_KEY) {
-      return res.status(500).json({ error: 'Missing TOKEN_ENCRYPTION_KEY in backend .env (required to store refresh tokens)' });
-    }
-
-    const state = new ObjectId().toString();
-    const returnTo = (req.query.returnTo && String(req.query.returnTo)) || getFrontendUrl();
-
-    res.cookie(OAUTH_STATE_COOKIE, state, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: false,
-      path: '/api/auth',
-      maxAge: 10 * 60 * 1000,
-    });
-    res.cookie(OAUTH_RETURN_COOKIE, returnTo, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: false,
-      path: '/api/auth',
-      maxAge: 10 * 60 * 1000,
-    });
-
-    const oauth2Client = getOAuthClient(req);
-    const url = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      prompt: 'consent',
-      scope: getScopes(),
-      state,
-    });
-    return res.redirect(url);
   });
 
   router.get('/google/callback', async (req, res) => {
