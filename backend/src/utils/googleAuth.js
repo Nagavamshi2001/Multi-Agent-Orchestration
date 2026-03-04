@@ -119,8 +119,41 @@ export const getYouTubeClient = () => {
   return google.youtube({ version: 'v3', auth });
 };
 
+/**
+ * Google Docs API v1 client.
+ * @returns {docs_v1.Docs}
+ */
+export const getDocsClient = () => {
+  const auth = createOAuth2Client();
+  return google.docs({ version: 'v1', auth });
+};
+
+/**
+ * Google Sheets API v4 client.
+ * @returns {sheets_v4.Sheets}
+ */
+export const getSheetsClient = () => {
+  const auth = createOAuth2Client();
+  return google.sheets({ version: 'v4', auth });
+};
+
+/**
+ * Google Drive API v3 client.
+ * @returns {drive_v3.Drive}
+ */
+export const getDriveClient = () => {
+  const auth = createOAuth2Client();
+  return google.drive({ version: 'v3', auth });
+};
+
 /** @returns {boolean} */
 export const isCalendarConfigured = () => isGoogleConfigured();
+
+/** @returns {boolean} */
+export const isDocsConfigured = () => isGoogleConfigured();
+
+/** @returns {boolean} */
+export const isSheetsConfigured = () => isGoogleConfigured();
 
 /** @returns {boolean} */
 export const isTasksConfigured = () => isGoogleConfigured();

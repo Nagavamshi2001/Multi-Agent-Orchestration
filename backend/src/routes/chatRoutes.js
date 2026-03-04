@@ -10,6 +10,7 @@ import {
   renameChatSession,
   deleteChatSessionById,
   clearChatSessionMessages,
+  getSettings,
 } from '../db/db.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
@@ -174,8 +175,18 @@ export const chatRouter = ({ developerMode }) => {
         userId: req.user?.id || null,
         userEmail: req.user?.email,
       });
+      let allowAgentReadDocsSheets = false;
+      if (req.user?.id) {
+        const settings = await getSettings(req.user.id);
+        allowAgentReadDocsSheets = settings?.allowAgentReadDocsSheets === true;
+      }
       const result = await runWithContext(
-        { userId: req.user?.id || null, developerMode, ...googleCtx },
+        {
+          userId: req.user?.id || null,
+          developerMode,
+          allowAgentReadDocsSheets,
+          ...googleCtx,
+        },
         async () => await runAgent(orchestratorAgent, agentInput, { userId: req.user?.id ?? null, developerMode })
       );
 

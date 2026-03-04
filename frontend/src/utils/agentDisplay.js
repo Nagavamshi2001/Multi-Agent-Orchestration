@@ -13,6 +13,8 @@ export function getAgentIcon(agentName, message = null) {
   if (name.includes('email')) return '📧';
   if (name.includes('calendar')) return '📅';
   if (name.includes('youtube') || (message?.videos?.length)) return '🎬';
+  if (name.includes('docs') || (message?.docs?.length)) return '📄';
+  if (name.includes('sheets') || (message?.sheets?.length)) return '📊';
   return '🤖';
 }
 

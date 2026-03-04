@@ -52,6 +52,8 @@ export function useWebSocketChat(messagesRef, sessionIdRef, isLoadingRef, errorR
           lastMsg.content = data.reply;
           lastMsg.agentName = data.agentName;
           lastMsg.videos = data.videos ?? null;
+          lastMsg.docs = data.docs ?? null;
+          lastMsg.sheets = data.sheets ?? null;
           lastMsg.autoPlayFirst = shouldAutoPlayFirst(
             messagesRef.value,
             lastMsg,

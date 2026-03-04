@@ -16,6 +16,13 @@ import {
   getVideosFromStreamToolOutput,
   YOUTUBE_AGENT_NAME,
 } from '../utils/youtubeHelpers.js';
+import {
+  getDocsFromStreamToolOutput,
+  getSheetsFromStreamToolOutput,
+  DOCS_AGENT_NAME,
+  SHEETS_AGENT_NAME,
+} from '../utils/docsSheetsHelpers.js';
+import { getSettings } from '../db/db.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -111,7 +118,17 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           userEmail: wsUser?.email,
           developerMode,
         });
-        const requestContext = { userId: wsUserId, developerMode, ...googleCtx };
+        let allowAgentReadDocsSheets = false;
+        if (wsUserId) {
+          const settings = await getSettings(wsUserId);
+          allowAgentReadDocsSheets = settings?.allowAgentReadDocsSheets === true;
+        }
+        const requestContext = {
+          userId: wsUserId,
+          developerMode,
+          allowAgentReadDocsSheets,
+          ...googleCtx,
+        };
         logger.debug('ws.chat.request_context', {
           userId: wsUserId,
           hasGoogleToken: !!requestContext.googleRefreshToken,
@@ -125,6 +142,8 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
 
         let lastAgentName = orchestratorAgent.name;
         let lastYouTubeVideos = null;
+        let lastDocs = null;
+        let lastSheets = null;
 
         for await (const event of result) {
           if (event.type === 'agent_updated_stream_event') {
@@ -195,6 +214,10 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
               const toolName = getToolNameFromItem(item);
               const videos = getVideosFromStreamToolOutput(item, toolName);
               if (videos?.length) lastYouTubeVideos = videos;
+              const docs = getDocsFromStreamToolOutput(item, toolName);
+              if (docs?.length) lastDocs = docs;
+              const sheets = getSheetsFromStreamToolOutput(item, toolName);
+              if (sheets?.length) lastSheets = sheets;
               ws.send(
                 JSON.stringify({
                   type: 'trace',
@@ -225,6 +248,8 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             content: finalReply,
             agentName: finalAgentName,
             videos: finalAgentName === YOUTUBE_AGENT_NAME && lastYouTubeVideos?.length ? lastYouTubeVideos : undefined,
+            docs: finalAgentName === DOCS_AGENT_NAME && lastDocs?.length ? lastDocs : undefined,
+            sheets: finalAgentName === SHEETS_AGENT_NAME && lastSheets?.length ? lastSheets : undefined,
           });
         } else {
           addToHistory(clientSessionId, 'assistant', finalReply);
@@ -238,6 +263,12 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         };
         if (finalAgentName === YOUTUBE_AGENT_NAME && lastYouTubeVideos?.length) {
           responsePayload.videos = lastYouTubeVideos;
+        }
+        if (finalAgentName === DOCS_AGENT_NAME && lastDocs?.length) {
+          responsePayload.docs = lastDocs;
+        }
+        if (finalAgentName === SHEETS_AGENT_NAME && lastSheets?.length) {
+          responsePayload.sheets = lastSheets;
         }
         ws.send(JSON.stringify(responsePayload));
       } catch (err) {

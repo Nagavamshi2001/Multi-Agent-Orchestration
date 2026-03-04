@@ -25,6 +25,16 @@
           :videos="message.videos"
           :auto-play-first="!!message.autoPlayFirst"
         />
+        <GoogleResourceList
+          v-if="message.docs && message.docs.length"
+          :items="message.docs"
+          resource-type="doc"
+        />
+        <GoogleResourceList
+          v-if="message.sheets && message.sheets.length"
+          :items="message.sheets"
+          resource-type="sheet"
+        />
         <ExecutionTrace :traces="flowTraces" />
       </div>
     </Transition>
@@ -56,6 +66,7 @@
 import { computed } from 'vue';
 import FeedbackControls from './FeedbackControls.vue';
 import YouTubeVideoList from './YouTubeVideoList.vue';
+import GoogleResourceList from './GoogleResourceList.vue';
 import ThinkingIndicator from './ThinkingIndicator.vue';
 import ExecutionTrace from './ExecutionTrace.vue';
 import { formatMessageTime, formatMarkdown } from '../utils/formatUtils.js';

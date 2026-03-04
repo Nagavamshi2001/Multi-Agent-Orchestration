@@ -5,7 +5,11 @@ export async function getSettings() {
   return data;
 }
 
-export async function saveSettings({ openaiApiKey, model }) {
-  const { data } = await api.put('/api/settings', { openaiApiKey, model });
+export async function saveSettings({ openaiApiKey, model, allowAgentReadDocsSheets }) {
+  const { data } = await api.put('/api/settings', {
+    openaiApiKey,
+    model,
+    allowAgentReadDocsSheets,
+  });
   return data;
 }

@@ -35,6 +35,8 @@ export function mapDbMessageToUI(m) {
     content: m.content,
     agentName: m.agent_name ?? null,
     videos: m.videos ?? null,
+    docs: m.docs ?? null,
+    sheets: m.sheets ?? null,
     timestamp: new Date(Number(m.created_at)).toISOString(),
     traces: [],
   };

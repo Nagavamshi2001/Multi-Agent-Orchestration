@@ -38,6 +38,15 @@ const FRIENDLY_TOOL_MESSAGES = {
   search_music: 'Searching for music...',
   get_video_details: 'Fetching video details...',
   delegate_to_youtube_assistant: 'Consulting the YouTube Assistant...',
+  create_document: 'Creating Google Doc...',
+  search_documents: 'Searching your Google Docs...',
+  get_document: 'Fetching document content...',
+  delegate_to_docs_assistant: 'Consulting the Docs Assistant...',
+  create_spreadsheet: 'Creating Google Sheet...',
+  search_spreadsheets: 'Searching your Google Sheets...',
+  get_spreadsheet_data: 'Reading spreadsheet data...',
+  update_spreadsheet_values: 'Writing data to spreadsheet...',
+  delegate_to_sheets_assistant: 'Consulting the Sheets Assistant...',
   handoff_to_orchestrator: 'Returning to Orchestrator...',
 };
 
