@@ -5,10 +5,11 @@ This is the **Node.js/Express backend** for the AI Agent Hub. It exposes REST an
 - Gmail (read/search/send mail)
 - Google Calendar (events)
 - Google Tasks
+- **YouTube** (channel, playlists, search videos, **search music** via YouTube Data API v3)
 - News (via `gnews`)
 - Web search (via `duck-duck-scrape`)
 
-The orchestrator decides when to delegate work to each specialist sub‑agent.
+The orchestrator decides when to delegate work to each specialist sub‑agent. When the YouTube agent returns video results, the WebSocket response includes a `videos` array so the frontend can show video cards and an inline player.
 
 ## Prerequisites
 
@@ -18,6 +19,7 @@ The orchestrator decides when to delegate work to each specialist sub‑agent.
   - Gmail API
   - Google Calendar API
   - Google Tasks API
+  - YouTube Data API v3 (readonly) — enable **YouTube Data API v3** in Google Cloud Console
 
 ## Installation
 
@@ -83,10 +85,10 @@ All config lives in `.env`. The example file `backend/.env.example` documents ev
 
 ### Storage & security
 
-- `MONGODB_URI` – MongoDB connection string (e.g. `mongodb+srv://user:pass@cluster.mongodb.net/app?appName=...`). Required for the app to start.
+- `MONGODB_URI` – MongoDB connection string (e.g. `mongodb+srv://user:pass@cluster.mongodb.net/app?appName=...`). **Required** for the app to work. The server listens immediately; MongoDB is initialized asynchronously. If a request hits the API before the DB is ready, you may see "Database not initialized". Ensure `MONGODB_URI` is set and the cluster is reachable; after a few seconds the DB is ready.
 - `TOKEN_ENCRYPTION_KEY` – strong secret for encrypting stored refresh tokens (use a 32‑byte base64 string or similar)
 
-MongoDB collections: `users`, `google_tokens`, `sessions`, `chat_sessions`, `chat_messages`, `chat_metrics`, `user_settings`. All use auto-generated `_id` (ObjectId); `google_tokens` and `user_settings` also store `user_id` for one-doc-per-user lookups. Chat history is persisted for logged‑in users; the History panel in the UI lets users browse and reopen past conversations.
+MongoDB collections: `users`, `google_tokens`, `sessions`, `chat_sessions`, `chat_messages`, `chat_metrics`, `user_settings`. All use auto-generated `_id` (ObjectId); `google_tokens` and `user_settings` also store `user_id` for one-doc-per-user lookups. Chat history is persisted for logged‑in users; the History panel in the UI lets users browse and reopen past conversations. Assistant messages from the YouTube agent can store a `videos` array so video cards reappear when reopening a session.
 
 ### Server
 
@@ -182,6 +184,7 @@ src/
 │   ├── emailAgent.js      # Email tools (read/send/search)
 │   ├── calendarAgent.js   # Calendar events
 │   ├── tasksAgent.js      # Google Tasks
+│   ├── youtubeAgent.js    # YouTube channel, playlists, search videos, search music
 │   ├── newsAgent.js       # News headlines/search
 │   └── searchAgent.js     # Web search
 ├── tools/
@@ -189,6 +192,7 @@ src/
 │   ├── emailTools.js      # Gmail implementations
 │   ├── calendarTools.js   # Calendar API
 │   ├── tasksTools.js      # Tasks API
+│   ├── youtubeTools.js    # YouTube Data API v3 (channel, playlists, search_videos, search_music, video details)
 │   ├── newsTools.js       # gnews
 │   └── searchTools.js     # duck-duck-scrape
 ├── mcp/
@@ -204,14 +208,16 @@ src/
 ├── middleware/
 │   └── rateLimit.js       # Per-user/IP rate limiting
 └── utils/
-    ├── index.js           # Barrel: toolResponse, helpers, googleAuth, emailHelpers
+    ├── index.js           # Barrel: toolResponse, helpers, googleAuth, emailHelpers, youtubeHelpers, toolDisplay
     ├── logger.js          # Structured logging (LOG_LEVEL)
     ├── openaiRun.js       # runAgent, resolveOpenAIConfig
-    ├── googleAuth.js      # isEmailConfigured, isCalendarConfigured, etc.
+    ├── googleAuth.js      # isEmailConfigured, isCalendarConfigured, getYouTubeClient, etc.
     ├── toolResponse.js    # toolSuccess, toolError, toolEmpty
-    ├── helpers.js         # clampMaxResults, formatNewsArticle, etc.
-    ├── emailHelpers.js    # Gmail message helpers
-    └── tokenCrypto.js     # Encrypt/decrypt stored refresh tokens
+    ├── helpers.js         # clampMaxResults, formatNewsArticle, safeTitle, etc.
+    ├── emailHelpers.js   # Gmail message helpers
+    ├── tokenCrypto.js     # Encrypt/decrypt stored refresh tokens
+    ├── youtubeHelpers.js  # toNormalizedVideo, extractVideosFromToolResult, getVideosFromStreamToolOutput, YOUTUBE_AGENT_NAME, YOUTUBE_VIDEO_TOOLS
+    └── toolDisplay.js     # getFriendlyToolMessage (trace labels), getToolNameFromItem (stream item)
 ```
 
 ### Reuse
@@ -220,4 +226,5 @@ src/
 - **App** – Use `createApp()` from `./app.js` in tests or alternate entry points; same middleware and routes without starting the HTTP server.
 - **Routes** – All API routes are mounted from `routes/index.js` via `mountRoutes(app, options)`.
 - **MCP** – Tool registration lives in `mcp/registerTools.js`; `mcp/server.js` stays a thin entry (create server, register tools, connect transport).
+- **Utils** – YouTube video normalization and tool-output parsing live in `youtubeHelpers.js`; human-readable tool names and stream-item helpers in `toolDisplay.js`. Add new tools in `toolDisplay.js` and YouTube video-returning tools in `YOUTUBE_VIDEO_TOOLS`.
 

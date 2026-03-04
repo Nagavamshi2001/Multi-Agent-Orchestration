@@ -2,14 +2,15 @@
 
 **Current release:** `v1.2.0`
 
-A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, news retrieval, and web search through natural language.
+A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, **YouTube & music** (YouTube Data API v3), news retrieval, and web search through natural language. The chat UI shows **video cards** for YouTube results and can **play videos/songs inline** (including auto-open and autoplay when you ask to "play" something).
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
 │           Vue.js Chat Interface          │  ← Port 5173
-│  (Dark glassmorphism, History panel)    │
+│  (Dark glassmorphism, History, video   │
+│   cards + inline YouTube player)        │
 └──────────────┬──────────────────────────┘
                │ HTTP REST / WebSocket
                ▼
@@ -17,18 +18,18 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 │            Node.js Express Server                  │  ← Port 3001
 │  ┌─────────────────────────────────────────────┐ │
 │  │  MongoDB — users, sessions, chat_sessions,  │ │
-│  │  chat_messages, chat_metrics, user_settings  │ │
+│  │  chat_messages (incl. videos), user_settings│ │
 │  └─────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────┐ │
 │  │            Orchestrator Agent               │ │
 │  │      (Routes tasks to sub-agents)           │ │
 │  └─────────────────┬──────────────────────────┘ │
 │                    │ handoff()                   │
-│      ┌─────┼─────┬─────┬─────┬─────┐             │
-│      ▼     ▼     ▼     ▼     ▼                   │
-│  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
-│  │📧 Email  ││📅Calendar││✅ Tasks  ││📰 News   ││🔍 Search │
-│  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘
+│      ┌─────┼─────┬─────┬─────┬─────┬─────┐      │
+│      ▼     ▼     ▼     ▼     ▼     ▼             │
+│  ┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐┌──────────┐
+│  │📧 Email  ││📅Calendar││✅ Tasks  ││🎬 YouTube││📰 News   ││🔍 Search │
+│  └──────────┘└──────────┘└──────────┘└──────────┘└──────────┘└──────────┘
 └───────────────────────────────────────────────────┘
 ```
 
@@ -36,7 +37,7 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 
 - Node.js 18+
 - OpenAI API key (GPT-4o or GPT-4-turbo)
-- Gmail OAuth2 credentials (for email, calendar, tasks — add all scopes)
+- Gmail OAuth2 credentials (for email, calendar, tasks, YouTube — add all scopes)
 
 ## Quick Start
 
@@ -108,7 +109,7 @@ This project supports **two modes**:
 #### Steps
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → Enable **Gmail API**, **Google Calendar API**, and **Google Tasks API**
+2. Create a project → Enable **Gmail API**, **Google Calendar API**, **Google Tasks API**, and **YouTube Data API v3**
 3. Go to **Credentials** → Create **OAuth 2.0 Client ID**
 4. Set these in `backend/.env`:
    - `GMAIL_CLIENT_ID`
@@ -135,6 +136,9 @@ This project supports **two modes**:
 | "Tech news today" | 📰 News Assistant |
 | "Search for node.js tutorials" | 🔍 Search Assistant |
 | "Look up the capital of France" | 🔍 Search Assistant |
+| "Search YouTube for React tutorials" | 🎬 YouTube Assistant |
+| "Show my YouTube channel" / "My playlists" | 🎬 YouTube Assistant |
+| "Play a song by Taylor Swift" / "Find music" | 🎬 YouTube Assistant (music search + auto-play first result) |
 | "What can you help me with?" | 🤖 Orchestrator (direct) |
 
 ---
@@ -222,14 +226,14 @@ Tool definitions live in `backend/src/tools/registry.js`; `backend/src/mcp/regis
 |-------|------------|
 | AI Agents | OpenAI Agents SDK (`@openai/agents`), GPT-4o |
 | MCP | Model Context Protocol (`@modelcontextprotocol/sdk`) — stdio server, tool bridge |
-| Google APIs | Gmail, Calendar, Tasks (OAuth2) |
+| Google APIs | Gmail, Calendar, Tasks, YouTube Data API v3 (OAuth2) |
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape |
-| Backend | Node.js, Express, WebSocket (ws) |
+| Backend | Node.js, Express, WebSocket (ws); shared **utils** (youtubeHelpers, toolDisplay, googleAuth, etc.) |
 | Database | MongoDB — users, google_tokens, sessions, chat_sessions, chat_messages, chat_metrics, user_settings |
-| Frontend | Vue 3, Vite, Axios |
+| Frontend | Vue 3, Vite, Axios; **utils** (messageUtils, formatUtils, agentDisplay), **composables** (useWebSocketChat, useNavigation), reusable components |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 
 ---
 
-📄 See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for full project documentation.
+📄 See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for full project documentation. Backend and frontend READMEs describe code structure (utils, composables, components) in detail.

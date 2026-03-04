@@ -32,6 +32,14 @@ import {
   getNewsByLocation,
 } from './newsTools.js';
 import { webSearch } from './searchTools.js';
+import {
+  getMyChannel,
+  listMyPlaylists,
+  listPlaylistItems,
+  searchVideos,
+  searchMusic,
+  getVideoDetails,
+} from './youtubeTools.js';
 
 /** @typedef {{ name: string, description: string, parameters: z.ZodType, execute: (params: any) => Promise<any> }} ToolDef */
 
@@ -254,6 +262,50 @@ export const searchToolDefs = [
   ),
 ];
 
+// ─── YouTube ──────────────────────────────────────────────────────────────────
+export const youtubeToolDefs = [
+  def('get_my_channel', 'Get the logged-in user\'s YouTube channel (title, stats).', z.object({}), getMyChannel),
+  def(
+    'list_my_playlists',
+    'List the user\'s YouTube playlists.',
+    z.object({ maxResults: z.number().int().min(1).max(50).optional().nullable() }),
+    listMyPlaylists
+  ),
+  def(
+    'list_playlist_items',
+    'List videos in a YouTube playlist.',
+    z.object({
+      playlistId: z.string(),
+      maxResults: z.number().int().min(1).max(50).optional().nullable(),
+    }),
+    listPlaylistItems
+  ),
+  def(
+    'search_videos',
+    'Search YouTube for videos by query.',
+    z.object({
+      query: z.string(),
+      maxResults: z.number().int().min(1).max(25).optional().nullable(),
+    }),
+    searchVideos
+  ),
+  def(
+    'search_music',
+    'Search for music/songs on YouTube (YouTube Music style). Use for play a song, find music, artist, album.',
+    z.object({
+      query: z.string(),
+      maxResults: z.number().int().min(1).max(25).optional().nullable(),
+    }),
+    searchMusic
+  ),
+  def(
+    'get_video_details',
+    'Get details of a YouTube video by ID.',
+    z.object({ videoId: z.string() }),
+    getVideoDetails
+  ),
+];
+
 /** All tool definitions for MCP server registration (name, description, inputSchema, handler). */
 export function getAllMcpToolDefs() {
   return [
@@ -262,5 +314,6 @@ export function getAllMcpToolDefs() {
     ...tasksToolDefs,
     ...newsToolDefs,
     ...searchToolDefs,
+    ...youtubeToolDefs,
   ];
 }

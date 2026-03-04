@@ -110,11 +110,23 @@ export const getTasksClient = () => {
   return google.tasks({ version: 'v1', auth });
 };
 
+/**
+ * YouTube Data API v3 client.
+ * @returns {youtube_v3.Youtube}
+ */
+export const getYouTubeClient = () => {
+  const auth = createOAuth2Client();
+  return google.youtube({ version: 'v3', auth });
+};
+
 /** @returns {boolean} */
 export const isCalendarConfigured = () => isGoogleConfigured();
 
 /** @returns {boolean} */
 export const isTasksConfigured = () => isGoogleConfigured();
+
+/** @returns {boolean} */
+export const isYouTubeConfigured = () => isGoogleConfigured();
 
 /** @returns {boolean} */
 export const isEmailConfigured = () => isGoogleConfigured({ requireUserEmail: true });

@@ -11,6 +11,11 @@ import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
 import { getHistory, addToHistory, formatHistoryWithDateTime } from '../chat/conversationMemory.js';
 import { logger } from '../utils/logger.js';
+import { getFriendlyToolMessage, getToolNameFromItem } from '../utils/toolDisplay.js';
+import {
+  getVideosFromStreamToolOutput,
+  YOUTUBE_AGENT_NAME,
+} from '../utils/youtubeHelpers.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -119,41 +124,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         );
 
         let lastAgentName = orchestratorAgent.name;
-
-        const getFriendlyToolMessage = (toolName) => {
-          if (!toolName || toolName === 'action') return 'Executing action...';
-          const maps = {
-            read_unread_emails: 'Reading your unread emails...',
-            send_email: 'Composing and sending email...',
-            search_emails: 'Searching your inbox...',
-            delegate_to_email_assistant: 'Consulting the Email Assistant...',
-            list_upcoming_events: 'Fetching your upcoming events...',
-            list_today_events: "Fetching today's events...",
-            create_calendar_event: 'Creating calendar event...',
-            delete_calendar_event: 'Deleting calendar event...',
-            search_calendar_events: 'Searching your calendar...',
-            get_calendar_event: 'Fetching event details...',
-            update_calendar_event: 'Updating calendar event...',
-            list_calendars: 'Listing your calendars...',
-            delegate_to_calendar_assistant: 'Consulting the Calendar Assistant...',
-            list_task_lists: 'Fetching your task lists...',
-            list_tasks: 'Fetching your tasks...',
-            create_task: 'Creating task...',
-            complete_task: 'Marking task complete...',
-            delete_task: 'Deleting task...',
-            delegate_to_tasks_assistant: 'Consulting the Tasks Assistant...',
-            get_headlines: 'Fetching headlines...',
-            search_news: 'Searching news...',
-            get_news_by_topic: 'Fetching news by topic...',
-            get_news_by_location: 'Fetching news by location...',
-            delegate_to_news_assistant: 'Consulting the News Assistant...',
-            web_search: 'Searching the web...',
-            delegate_to_search_assistant: 'Consulting the Search Assistant...',
-            handoff_to_orchestrator: 'Returning to Orchestrator...',
-          };
-          const formattedName = toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ');
-          return maps[toolName] || `Executing ${formattedName}...`;
-        };
+        let lastYouTubeVideos = null;
 
         for await (const event of result) {
           if (event.type === 'agent_updated_stream_event') {
@@ -162,8 +133,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             const { name, item } = event;
 
             if (name === 'tool_called' || name === 'tool_called_item_created') {
-              const toolName =
-                item?.function?.name || item?.name || item?.rawItem?.name || item?.toolName || 'action';
+              const toolName = getToolNameFromItem(item);
               ws.send(
                 JSON.stringify({
                   type: 'trace',
@@ -222,15 +192,16 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                 })
               );
             } else if (name === 'tool_output') {
-              const toolName =
-                item?.function?.name || item?.name || item?.rawItem?.name || item?.toolName || 'action';
+              const toolName = getToolNameFromItem(item);
+              const videos = getVideosFromStreamToolOutput(item, toolName);
+              if (videos?.length) lastYouTubeVideos = videos;
               ws.send(
                 JSON.stringify({
                   type: 'trace',
                   step: 'tool_end',
                   agentName: lastAgentName,
                   tool: toolName,
-                  message: `Completed action: ${toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ')}`,
+                  message: getFriendlyToolMessage(toolName),
                   sessionId: effectiveSessionId,
                 })
               );
@@ -253,19 +224,22 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             role: 'assistant',
             content: finalReply,
             agentName: finalAgentName,
+            videos: finalAgentName === YOUTUBE_AGENT_NAME && lastYouTubeVideos?.length ? lastYouTubeVideos : undefined,
           });
         } else {
           addToHistory(clientSessionId, 'assistant', finalReply);
         }
 
-        ws.send(
-          JSON.stringify({
-            type: 'response',
-            reply: finalReply,
-            agentName: finalAgentName,
-            sessionId: effectiveSessionId,
-          })
-        );
+        const responsePayload = {
+          type: 'response',
+          reply: finalReply,
+          agentName: finalAgentName,
+          sessionId: effectiveSessionId,
+        };
+        if (finalAgentName === YOUTUBE_AGENT_NAME && lastYouTubeVideos?.length) {
+          responsePayload.videos = lastYouTubeVideos;
+        }
+        ws.send(JSON.stringify(responsePayload));
       } catch (err) {
         logger.error('ws.chat.error', {
           sessionId,

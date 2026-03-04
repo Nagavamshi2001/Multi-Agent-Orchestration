@@ -4,7 +4,7 @@ import { initDb, cleanupExpiredSessions } from './db/db.js';
 import { createApp } from './app.js';
 import { attachChatWebSocketServer } from './ws/chatWsServer.js';
 import { logger } from './utils/logger.js';
-import { isEmailConfigured, isCalendarConfigured, isTasksConfigured } from './utils/googleAuth.js';
+import { isEmailConfigured, isCalendarConfigured, isTasksConfigured, isYouTubeConfigured } from './utils/googleAuth.js';
 import { config } from './config/index.js';
 
 const app = createApp();
@@ -22,6 +22,7 @@ server.listen(config.port, () => {
     emailConfigured: isEmailConfigured(),
     calendarConfigured: isCalendarConfigured(),
     tasksConfigured: isTasksConfigured(),
+    youtubeConfigured: isYouTubeConfigured(),
   });
 
   initDb()
