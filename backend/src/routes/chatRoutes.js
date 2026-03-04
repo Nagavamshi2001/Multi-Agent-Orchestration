@@ -13,7 +13,7 @@ import {
 } from '../db/db.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
-import { getHistory, addToHistory, clearConversation, formatHistory } from '../chat/conversationMemory.js';
+import { getHistory, addToHistory, clearConversation, formatHistoryWithDateTime } from '../chat/conversationMemory.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { logger } from '../utils/logger.js';
 
@@ -168,7 +168,7 @@ export const chatRouter = ({ developerMode }) => {
         history = getHistory(sessionId);
       }
 
-      const agentInput = formatHistory(history);
+      const agentInput = formatHistoryWithDateTime(history);
 
       const googleCtx = await resolveGoogleContext({
         userId: req.user?.id || null,

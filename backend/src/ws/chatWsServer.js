@@ -9,7 +9,7 @@ import {
 import { parseCookies, SESSION_COOKIE } from '../auth/session.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
-import { getHistory, addToHistory, formatHistory } from '../chat/conversationMemory.js';
+import { getHistory, addToHistory, formatHistoryWithDateTime } from '../chat/conversationMemory.js';
 import { logger } from '../utils/logger.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
@@ -98,7 +98,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           addToHistory(clientSessionId, 'user', trimmed);
           history = getHistory(clientSessionId);
         }
-        const agentInput = formatHistory(history);
+        const agentInput = formatHistoryWithDateTime(history);
 
         // Use streaming mode to capture intermediate events (traces/thoughts)
         const googleCtx = await resolveGoogleContext({
@@ -128,6 +128,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             search_emails: 'Searching your inbox...',
             delegate_to_email_assistant: 'Consulting the Email Assistant...',
             list_upcoming_events: 'Fetching your upcoming events...',
+            list_today_events: "Fetching today's events...",
             create_calendar_event: 'Creating calendar event...',
             delete_calendar_event: 'Deleting calendar event...',
             search_calendar_events: 'Searching your calendar...',

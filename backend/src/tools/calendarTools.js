@@ -16,9 +16,10 @@ export const listUpcomingEvents = async ({ maxResults = 10, calendarId = 'primar
 
   try {
     const calendar = getCalendarClient();
+    const calId = calendarId || 'primary';
     const now = new Date();
     const response = await calendar.events.list({
-      calendarId,
+      calendarId: calId,
       timeMin: now.toISOString(),
       maxResults: clampMaxResults(maxResults, 50),
       singleEvents: true,
@@ -83,8 +84,9 @@ export const createEvent = async ({
       },
     };
 
+    const calId = calendarId || 'primary';
     const response = await calendar.events.insert({
-      calendarId,
+      calendarId: calId,
       requestBody: event,
     });
 
@@ -112,8 +114,9 @@ export const deleteEvent = async ({ eventId, calendarId = 'primary' }) => {
 
   try {
     const calendar = getCalendarClient();
+    const calId = calendarId || 'primary';
     await calendar.events.delete({
-      calendarId,
+      calendarId: calId,
       eventId,
     });
     return toolSuccess({
@@ -138,8 +141,9 @@ export const getEvent = async ({ eventId, calendarId = 'primary' }) => {
 
   try {
     const calendar = getCalendarClient();
+    const calId = calendarId || 'primary';
     const response = await calendar.events.get({
-      calendarId,
+      calendarId: calId,
       eventId,
     });
     const ev = response.data;
@@ -198,8 +202,9 @@ export const updateEvent = async ({
       return toolError('At least one field to update is required (summary, startDateTime, endDateTime, description, or location).');
     }
 
+    const calId = calendarId || 'primary';
     const response = await calendar.events.patch({
-      calendarId,
+      calendarId: calId,
       eventId,
       requestBody: body,
     });
@@ -253,6 +258,59 @@ export const listCalendars = async () => {
   }
 };
 
+// ─── Tool: List Today's Events (full day in UTC) ───────────────────────────────
+export const listTodayEvents = async ({ maxResults = 50, calendarId = 'primary' }) => {
+  if (!isCalendarConfigured()) {
+    return toolError(
+      'Calendar credentials not configured. Add Calendar scope to OAuth in .env (https://www.googleapis.com/auth/calendar)',
+      { setup: 'Re-authorize in OAuth Playground with calendar scope and update GMAIL_REFRESH_TOKEN' }
+    );
+  }
+
+  try {
+    const calendar = getCalendarClient();
+    const calId = calendarId || 'primary';
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(now.getUTCDate()).padStart(2, '0');
+    const timeMin = `${y}-${m}-${d}T00:00:00.000Z`;
+    const timeMax = `${y}-${m}-${d}T23:59:59.999Z`;
+
+    const response = await calendar.events.list({
+      calendarId: calId,
+      timeMin,
+      timeMax,
+      maxResults: clampMaxResults(maxResults, 50),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = response.data.items || [];
+    if (events.length === 0) {
+      return toolEmpty('No events scheduled for today.', { events: [] });
+    }
+
+    const formatted = events.map((ev) => {
+      const start = ev.start?.dateTime || ev.start?.date;
+      const end = ev.end?.dateTime || ev.end?.date;
+      return {
+        id: ev.id,
+        summary: safeTitle(ev.summary),
+        start,
+        end,
+        location: ev.location || null,
+        description: ev.description ? ev.description.substring(0, 200) : null,
+      };
+    });
+
+    return toolSuccess({ count: formatted.length, events: formatted });
+  } catch (err) {
+    console.error('[listTodayEvents] Error:', err.message);
+    return toolError(`Failed to list today's events: ${err.message}`);
+  }
+};
+
 // ─── Tool: Search Events (by date range or query) ──────────────────────────────
 export const searchEvents = async ({
   query = '',
@@ -267,8 +325,9 @@ export const searchEvents = async ({
 
   try {
     const calendar = getCalendarClient();
+    const calId = calendarId || 'primary';
     const opts = {
-      calendarId,
+      calendarId: calId,
       maxResults: clampMaxResults(maxResults, 50),
       singleEvents: true,
       orderBy: 'startTime',
