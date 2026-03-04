@@ -7,13 +7,11 @@ import { logger } from './utils/logger.js';
 import { isEmailConfigured, isCalendarConfigured, isTasksConfigured } from './utils/googleAuth.js';
 import { config } from './config/index.js';
 
-await initDb();
-cleanupExpiredSessions().catch(() => {});
-
 const app = createApp();
 const server = createServer(app);
 attachChatWebSocketServer({ server, developerMode: config.developerMode });
 
+// Listen immediately so Render health checks get 200 as soon as the process is up (reduces 503 on cold start).
 server.listen(config.port, () => {
   const hasEnvOpenAI = !!process.env.OPENAI_API_KEY;
   logger.info('server.started', {
@@ -25,6 +23,11 @@ server.listen(config.port, () => {
     calendarConfigured: isCalendarConfigured(),
     tasksConfigured: isTasksConfigured(),
   });
+
+  initDb()
+    .then(() => cleanupExpiredSessions().catch(() => {}))
+    .then(() => logger.info('server.db.ready'))
+    .catch((err) => logger.error('server.db.initFailed', { error: err.message }));
 });
 
 export default app;
