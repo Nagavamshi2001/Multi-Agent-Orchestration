@@ -1,5 +1,4 @@
-import crypto from 'crypto';
-import { exec, queryAll, nowMs, persist } from './client.js';
+import { getCollection, nowMs } from './client.js';
 import { logger } from '../utils/logger.js';
 
 export const recordChatMetric = async ({
@@ -13,16 +12,21 @@ export const recordChatMetric = async ({
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (typeof latencyMs !== 'number' || latencyMs < 0) throw new Error('latencyMs must be a non-negative number');
 
-  const id = crypto.randomUUID();
   const ts = nowMs();
+  const helpfulVal = helpful === true ? 1 : helpful === false ? 0 : null;
 
-  exec(
-    `INSERT INTO chat_metrics (id, chat_session_id, user_id, latency_ms, rating, helpful, feedback_text, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-    [id, chatSessionId, userId || null, latencyMs, rating, helpful ? 1 : helpful === false ? 0 : null, feedbackText || null, ts]
-  );
+  const chatMetrics = getCollection('chat_metrics');
+  const result = await chatMetrics.insertOne({
+    chat_session_id: chatSessionId,
+    user_id: userId || null,
+    latency_ms: latencyMs,
+    rating,
+    helpful: helpfulVal,
+    feedback_text: feedbackText || null,
+    created_at: ts,
+  });
+  const id = result.insertedId.toString();
 
-  await persist();
   logger.debug('db.chat_metrics.insert', {
     id,
     chatSessionId,
@@ -36,16 +40,22 @@ export const recordChatMetric = async ({
 };
 
 export const getMetricsSummary = async ({ userId } = {}) => {
-  const rows = queryAll(
-    `SELECT
-       COUNT(*) AS total,
-       AVG(latency_ms) AS avg_latency,
-       AVG(CASE WHEN rating IS NOT NULL THEN rating END) AS avg_rating
-     FROM chat_metrics
-     WHERE (? IS NULL OR user_id = ?);`,
-    [userId || null, userId || null]
-  );
-
+  const chatMetrics = getCollection('chat_metrics');
+  const match = userId ? { user_id: userId } : {};
+  const rows = await chatMetrics
+    .aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          avg_latency: { $avg: '$latency_ms' },
+          avg_rating: { $avg: '$rating' },
+        },
+      },
+      { $project: { _id: 0, total: 1, avg_latency: 1, avg_rating: 1 } },
+    ])
+    .toArray();
   const row = rows[0] || {};
   return {
     total: Number(row.total || 0),
@@ -53,4 +63,3 @@ export const getMetricsSummary = async ({ userId } = {}) => {
     avgRating: row.avg_rating != null ? Number(row.avg_rating) : null,
   };
 };
-

@@ -82,7 +82,7 @@ src/
 │   ├── ChatInput.vue       # Textarea + send; auto-resize
 │   ├── MessageBubble.vue   # Single message: agent badge, traces, markdown, latency, FeedbackControls
 │   ├── EmptyState.vue      # Empty state with suggestion chips
-│   ├── FeedbackControls.vue # Thumbs up/down; emits feedback for /api/metrics/feedback
+│   ├── FeedbackControls.vue # Thumbs up/down; on submit sends to POST /api/metrics/feedback (metrics recorded only when user gives feedback)
 │   ├── LoginModal.vue      # Sign-in prompt with Google login
 │   ├── HistoryDrawer.vue   # List/open/delete chat sessions (auth required)
 │   ├── ErrorToast.vue      # Dismissible error message
@@ -94,7 +94,7 @@ src/
 │   ├── apiClient.js        # Axios instance; API_BASE, WS_URL from config
 │   ├── auth.js             # getMe, logout
 │   ├── chat.js             # checkHealth, sendMessage, clearSession, listChatSessions, createChatSession, getChatSessionMessages, renameChatSession, deleteChatSession
-│   ├── metrics.js          # sendMetricsFeedback, getMetricsSummary
+│   ├── metrics.js          # sendMetricsFeedback (called when user clicks thumbs up/down), getMetricsSummary
 │   ├── mcp.js              # getMcpServers, saveMcpServer
 │   ├── settings.js         # getSettings, saveSettings
 │   └── index.js            # Same exports as api.js for import from '@/services'

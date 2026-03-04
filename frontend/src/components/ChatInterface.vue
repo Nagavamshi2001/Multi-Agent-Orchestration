@@ -124,14 +124,8 @@ const connectWebSocket = () => {
         const base = lastMsg._sentAt || nowTs;
         lastMsg.latencyMs = nowTs - base;
 
-        if (me.value) {
-          sendMetricsFeedback({
-            chatSessionId: data.sessionId || sessionId.value,
-            latencyMs: lastMsg.latencyMs,
-            rating: null,
-            helpful: null,
-            feedbackText: null,
-          }).catch(() => {});
+        if (data.sessionId) {
+          sessionId.value = data.sessionId;
         }
       }
       isLoading.value = false;

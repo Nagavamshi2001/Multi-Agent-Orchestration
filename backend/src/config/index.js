@@ -10,7 +10,7 @@ export const config = Object.freeze({
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   developerMode: truthy(process.env.DEVELOPER_MODE),
   logLevel: (process.env.LOG_LEVEL || 'info').toLowerCase(),
-  dbPath: process.env.DB_PATH || './data/app.sqlite',
+  mongodbUri: process.env.MONGODB_URI || '',
 });
 
 export default config;

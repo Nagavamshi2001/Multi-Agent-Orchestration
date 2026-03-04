@@ -1,21 +1,26 @@
-import crypto from 'crypto';
-import { exec, queryOne, queryAll, nowMs, persist } from './client.js';
+import { ObjectId } from 'mongodb';
+import { getCollection, nowMs } from './client.js';
 import { logger } from '../utils/logger.js';
 
-const requireChatSessionOwner = ({ chatSessionId, userId }) => {
-  const row = queryOne('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?;', [chatSessionId, userId]);
-  return !!row?.id;
+const toId = (id) => (typeof id === 'string' && /^[a-f0-9]{24}$/i.test(id) ? new ObjectId(id) : id);
+
+const requireChatSessionOwner = async ({ chatSessionId, userId }) => {
+  const chatSessions = getCollection('chat_sessions');
+  const row = await chatSessions.findOne({ _id: toId(chatSessionId), user_id: userId });
+  return !!row;
 };
 
 export const createChatSession = async ({ userId, title } = {}) => {
   if (!userId) throw new Error('userId is required');
-  const id = crypto.randomUUID();
   const ts = nowMs();
-  exec(
-    'INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?);',
-    [id, userId, title || null, ts, ts]
-  );
-  await persist();
+  const chatSessions = getCollection('chat_sessions');
+  const result = await chatSessions.insertOne({
+    user_id: userId,
+    title: title || null,
+    created_at: ts,
+    updated_at: ts,
+  });
+  const id = result.insertedId.toString();
   logger.debug('db.chat_sessions.insert', { id, userId, title: title || null });
   return { id, title: title || null, createdAt: ts, updatedAt: ts };
 };
@@ -23,57 +28,64 @@ export const createChatSession = async ({ userId, title } = {}) => {
 export const ensureChatSession = async ({ chatSessionId, userId, title } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
-  const existing = queryOne('SELECT id, title FROM chat_sessions WHERE id = ?;', [chatSessionId]);
+  const chatSessions = getCollection('chat_sessions');
+  const sid = toId(chatSessionId);
+  const existing = await chatSessions.findOne(
+    { _id: sid },
+    { projection: { title: 1 } }
+  );
   const ts = nowMs();
-  if (existing?.id) {
+  if (existing) {
     if (title && !existing.title) {
-      exec('UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?;', [
-        title,
-        ts,
-        chatSessionId,
-        userId,
-      ]);
-      await persist();
+      await chatSessions.updateOne(
+        { _id: sid, user_id: userId },
+        { $set: { title, updated_at: ts } }
+      );
       logger.debug('db.chat_sessions.ensure.updateTitle', { id: chatSessionId, userId, title });
     }
-    return { id: chatSessionId, title: existing.title || null };
+    return { id: existing._id.toString(), title: existing.title || null };
   }
-  exec(
-    'INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?);',
-    [chatSessionId, userId, title || null, ts, ts]
-  );
-  await persist();
-  logger.debug('db.chat_sessions.ensure.insert', { id: chatSessionId, userId, title: title || null });
-  return { id: chatSessionId, title: title || null };
+  const result = await chatSessions.insertOne({
+    user_id: userId,
+    title: title || null,
+    created_at: ts,
+    updated_at: ts,
+  });
+  const newId = result.insertedId.toString();
+  logger.debug('db.chat_sessions.ensure.insert', { id: newId, userId, title: title || null });
+  return { id: newId, title: title || null };
 };
 
 export const renameChatSession = async ({ chatSessionId, userId, title } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
   const ts = nowMs();
-  exec('UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?;', [
-    title || null,
-    ts,
-    chatSessionId,
-    userId,
-  ]);
-  await persist();
+  const chatSessions = getCollection('chat_sessions');
+  await chatSessions.updateOne(
+    { _id: toId(chatSessionId), user_id: userId },
+    { $set: { title: title || null, updated_at: ts } }
+  );
 };
 
 export const deleteChatSessionById = async ({ chatSessionId, userId } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
-  exec('DELETE FROM chat_sessions WHERE id = ? AND user_id = ?;', [chatSessionId, userId]);
-  await persist();
+  const chatSessions = getCollection('chat_sessions');
+  await chatSessions.deleteOne({ _id: toId(chatSessionId), user_id: userId });
 };
 
 export const clearChatSessionMessages = async ({ chatSessionId, userId } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
-  if (!requireChatSessionOwner({ chatSessionId, userId })) return;
-  exec('DELETE FROM chat_messages WHERE chat_session_id = ?;', [chatSessionId]);
-  exec('UPDATE chat_sessions SET updated_at = ? WHERE id = ? AND user_id = ?;', [nowMs(), chatSessionId, userId]);
-  await persist();
+  const isOwner = await requireChatSessionOwner({ chatSessionId, userId });
+  if (!isOwner) return;
+  const chatMessages = getCollection('chat_messages');
+  const chatSessions = getCollection('chat_sessions');
+  await chatMessages.deleteMany({ chat_session_id: chatSessionId });
+  await chatSessions.updateOne(
+    { _id: toId(chatSessionId), user_id: userId },
+    { $set: { updated_at: nowMs() } }
+  );
 };
 
 export const addChatMessage = async ({ chatSessionId, userId, role, content, agentName } = {}) => {
@@ -82,97 +94,130 @@ export const addChatMessage = async ({ chatSessionId, userId, role, content, age
   if (!role) throw new Error('role is required');
   if (typeof content !== 'string' || !content.trim()) throw new Error('content is required');
 
-  await ensureChatSession({ chatSessionId, userId });
+  const session = await ensureChatSession({ chatSessionId, userId });
+  const effectiveSessionId = session.id;
 
-  const id = crypto.randomUUID();
   const ts = nowMs();
-  exec(
-    'INSERT INTO chat_messages (id, chat_session_id, role, content, agent_name, created_at) VALUES (?, ?, ?, ?, ?, ?);',
-    [id, chatSessionId, role, content, agentName || null, ts]
-  );
+  const chatMessages = getCollection('chat_messages');
+  const chatSessions = getCollection('chat_sessions');
+  const result = await chatMessages.insertOne({
+    chat_session_id: effectiveSessionId,
+    role,
+    content,
+    agent_name: agentName || null,
+    created_at: ts,
+  });
+  const id = result.insertedId.toString();
   logger.debug('db.chat_messages.insert', {
     id,
-    chatSessionId,
+    chatSessionId: effectiveSessionId,
     userId,
     role,
     hasContent: !!content,
     agentName: agentName || null,
   });
 
-  // Best-effort title: first user message snippet
+  const sid = toId(effectiveSessionId);
   if (role === 'user') {
-    const titleRow = queryOne('SELECT title FROM chat_sessions WHERE id = ? AND user_id = ?;', [chatSessionId, userId]);
-    if (!titleRow?.title) {
+    const sess = await chatSessions.findOne(
+      { _id: sid, user_id: userId },
+      { projection: { title: 1 } }
+    );
+    if (!sess?.title) {
       const snippet = content.trim().replace(/\s+/g, ' ').slice(0, 60);
-      exec('UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?;', [
-        snippet || null,
-        ts,
-        chatSessionId,
-        userId,
-      ]);
+      await chatSessions.updateOne(
+        { _id: sid, user_id: userId },
+        { $set: { title: snippet || null, updated_at: ts } }
+      );
     } else {
-      exec('UPDATE chat_sessions SET updated_at = ? WHERE id = ? AND user_id = ?;', [ts, chatSessionId, userId]);
+      await chatSessions.updateOne(
+        { _id: sid, user_id: userId },
+        { $set: { updated_at: ts } }
+      );
     }
   } else {
-    exec('UPDATE chat_sessions SET updated_at = ? WHERE id = ? AND user_id = ?;', [ts, chatSessionId, userId]);
+    await chatSessions.updateOne(
+      { _id: sid, user_id: userId },
+      { $set: { updated_at: ts } }
+    );
   }
 
-  await persist();
-  return { id, createdAt: ts };
+  return { id, createdAt: ts, sessionId: effectiveSessionId };
 };
 
 export const listChatSessionsByUserId = async ({ userId, limit = 50, offset = 0 } = {}) => {
   if (!userId) throw new Error('userId is required');
   const lim = Math.max(1, Math.min(200, Number(limit) || 50));
   const off = Math.max(0, Number(offset) || 0);
-  const rows = queryAll(
-    `SELECT cs.id, cs.title, cs.created_at, cs.updated_at,
-      (SELECT substr(m.content, 1, 120)
-        FROM chat_messages m
-        WHERE m.chat_session_id = cs.id
-        ORDER BY m.created_at DESC
-        LIMIT 1) AS last_message_preview
-     FROM chat_sessions cs
-     WHERE cs.user_id = ?
-       AND EXISTS (SELECT 1 FROM chat_messages m2 WHERE m2.chat_session_id = cs.id)
-     ORDER BY cs.updated_at DESC
-     LIMIT ? OFFSET ?;`,
-    [userId, lim, off]
-  );
+  const chatSessions = getCollection('chat_sessions');
+  const cursor = chatSessions.aggregate([
+    { $match: { user_id: userId } },
+    {
+      $lookup: {
+        from: 'chat_messages',
+        let: { sessionId: { $toString: '$_id' } },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$chat_session_id', '$$sessionId'] } } },
+          { $sort: { created_at: -1 } },
+          { $limit: 1 },
+          { $project: { content: 1 } },
+        ],
+        as: 'lastMsg',
+      },
+    },
+    { $match: { lastMsg: { $exists: true }, 'lastMsg.0': { $exists: true } } },
+    {
+      $project: {
+        id: { $toString: '$_id' },
+        title: 1,
+        created_at: 1,
+        updated_at: 1,
+        last_message_preview: {
+          $substr: [{ $arrayElemAt: ['$lastMsg.content', 0] }, 0, 120],
+        },
+      },
+    },
+    { $sort: { updated_at: -1 } },
+    { $skip: off },
+    { $limit: lim },
+  ]);
+  const rows = await cursor.toArray();
   return rows;
 };
 
 export const getChatMessagesBySessionId = async ({ chatSessionId, userId, limit = 200, offset = 0 } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
-  if (!requireChatSessionOwner({ chatSessionId, userId })) return [];
+  const isOwner = await requireChatSessionOwner({ chatSessionId, userId });
+  if (!isOwner) return [];
   const lim = Math.max(1, Math.min(1000, Number(limit) || 200));
   const off = Math.max(0, Number(offset) || 0);
-  const rows = queryAll(
-    `SELECT id, role, content, agent_name, created_at
-     FROM chat_messages
-     WHERE chat_session_id = ?
-     ORDER BY created_at ASC
-     LIMIT ? OFFSET ?;`,
-    [chatSessionId, lim, off]
-  );
-  return rows;
+  const chatMessages = getCollection('chat_messages');
+  const cursor = chatMessages.find(
+    { chat_session_id: chatSessionId },
+    { projection: { role: 1, content: 1, agent_name: 1, created_at: 1 } }
+  ).sort({ created_at: 1 }).skip(off).limit(lim);
+  const rows = await cursor.toArray();
+  return rows.map((r) => ({
+    id: r._id.toString(),
+    role: r.role,
+    content: r.content,
+    agent_name: r.agent_name,
+    created_at: r.created_at,
+  }));
 };
 
 export const getChatMessagesForAgentContext = async ({ chatSessionId, userId, limit = 20 } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
-  if (!requireChatSessionOwner({ chatSessionId, userId })) return [];
+  const isOwner = await requireChatSessionOwner({ chatSessionId, userId });
+  if (!isOwner) return [];
   const lim = Math.max(1, Math.min(100, Number(limit) || 20));
-  // Fetch newest first, then reverse to chronological order
-  const rows = queryAll(
-    `SELECT role, content
-     FROM chat_messages
-     WHERE chat_session_id = ?
-     ORDER BY created_at DESC
-     LIMIT ?;`,
-    [chatSessionId, lim]
-  ).reverse();
-  return rows;
+  const chatMessages = getCollection('chat_messages');
+  const cursor = chatMessages.find(
+    { chat_session_id: chatSessionId },
+    { projection: { role: 1, content: 1, _id: 0 } }
+  ).sort({ created_at: -1 }).limit(lim);
+  const rows = await cursor.toArray();
+  return rows.reverse();
 };
-

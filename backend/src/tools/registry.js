@@ -10,6 +10,7 @@ import {
 } from './emailTools.js';
 import {
   listUpcomingEvents,
+  listTodayEvents,
   createEvent,
   deleteEvent,
   getEvent,
@@ -73,12 +74,21 @@ export const emailToolDefs = [
 export const calendarToolDefs = [
   def(
     'list_upcoming_events',
-    "List upcoming events from the user's primary Google Calendar.",
+    "List upcoming events from the user's primary Google Calendar (events that start from now onward).",
     z.object({
       maxResults: z.number().int().min(1).max(50).optional().nullable(),
       calendarId: z.string().optional().nullable(),
     }),
     listUpcomingEvents
+  ),
+  def(
+    'list_today_events',
+    "List all events scheduled for today (full day from 00:00 to 23:59 UTC). Use this for 'what's on my calendar today', 'events today', or 'my schedule today'.",
+    z.object({
+      maxResults: z.number().int().min(1).max(50).optional().nullable(),
+      calendarId: z.string().optional().nullable(),
+    }),
+    listTodayEvents
   ),
   def(
     'create_event',

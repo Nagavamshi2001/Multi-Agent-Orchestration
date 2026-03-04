@@ -1,25 +1,27 @@
-import { exec, queryOne, nowMs, persist } from './client.js';
+import { getCollection, nowMs } from './client.js';
 import { encryptSecret, decryptSecret } from '../utils/tokenCrypto.js';
 
 const DEFAULT_MODEL = 'gpt-4o';
 
-export const getSettings = (userId) => {
-  const row = queryOne(
-    'SELECT user_id, openai_key_enc, openai_model FROM user_settings WHERE user_id = ?;',
-    [userId]
+export const getSettings = async (userId) => {
+  const userSettings = getCollection('user_settings');
+  const row = await userSettings.findOne(
+    { user_id: userId },
+    { projection: { user_id: 1, openai_key_enc: 1, openai_model: 1 } }
   );
   if (!row) return null;
   return {
-    userId: row.user_id,
+    userId: typeof row.user_id === 'string' ? row.user_id : row.user_id?.toString?.() ?? row.user_id,
     hasOpenaiKey: !!row.openai_key_enc,
     model: row.openai_model || DEFAULT_MODEL,
   };
 };
 
-export const getSettingsWithKey = (userId) => {
-  const row = queryOne(
-    'SELECT user_id, openai_key_enc, openai_model FROM user_settings WHERE user_id = ?;',
-    [userId]
+export const getSettingsWithKey = async (userId) => {
+  const userSettings = getCollection('user_settings');
+  const row = await userSettings.findOne(
+    { user_id: userId },
+    { projection: { user_id: 1, openai_key_enc: 1, openai_model: 1 } }
   );
   if (!row || !row.openai_key_enc) return null;
   let openaiApiKey = null;
@@ -29,7 +31,7 @@ export const getSettingsWithKey = (userId) => {
     return null;
   }
   return {
-    userId: row.user_id,
+    userId: typeof row.user_id === 'string' ? row.user_id : row.user_id?.toString?.() ?? row.user_id,
     openaiApiKey,
     model: row.openai_model || DEFAULT_MODEL,
   };
@@ -37,32 +39,33 @@ export const getSettingsWithKey = (userId) => {
 
 export const upsertSettings = async (userId, { openaiApiKey, model }) => {
   const ts = nowMs();
-  const existing = queryOne('SELECT user_id, openai_key_enc FROM user_settings WHERE user_id = ?;', [
-    userId,
-  ]);
+  const userSettings = getCollection('user_settings');
+  const existing = await userSettings.findOne(
+    { user_id: userId },
+    { projection: { openai_key_enc: 1 } }
+  );
 
-  if (existing?.user_id) {
-    let keyEnc = existing.openai_key_enc;
+  let keyEnc;
+  if (existing) {
+    keyEnc = existing.openai_key_enc;
     if (openaiApiKey !== undefined) {
-      if (openaiApiKey === null || openaiApiKey === '') {
-        keyEnc = null;
-      } else {
-        keyEnc = encryptSecret(openaiApiKey);
-      }
+      keyEnc = openaiApiKey === null || openaiApiKey === '' ? null : encryptSecret(openaiApiKey);
     }
     const modelVal = model !== undefined && model !== '' ? model : null;
-    exec(
-      'UPDATE user_settings SET openai_key_enc = ?, openai_model = ?, updated_at = ? WHERE user_id = ?;',
-      [keyEnc, modelVal, ts, userId]
+    await userSettings.updateOne(
+      { user_id: userId },
+      { $set: { openai_key_enc: keyEnc, openai_model: modelVal, updated_at: ts } }
     );
   } else {
-    const keyEnc =
+    keyEnc =
       openaiApiKey && openaiApiKey !== '' ? encryptSecret(openaiApiKey) : null;
     const modelVal = model && model !== '' ? model : null;
-    exec(
-      'INSERT INTO user_settings (user_id, openai_key_enc, openai_model, created_at, updated_at) VALUES (?, ?, ?, ?, ?);',
-      [userId, keyEnc, modelVal, ts, ts]
-    );
+    await userSettings.insertOne({
+      user_id: userId,
+      openai_key_enc: keyEnc,
+      openai_model: modelVal,
+      created_at: ts,
+      updated_at: ts,
+    });
   }
-  await persist();
 };

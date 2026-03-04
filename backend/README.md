@@ -74,7 +74,7 @@ All config lives in `.env`. The example file `backend/.env.example` documents ev
 - `DEVELOPER_MODE=false`
   - Multi‑user Google SSO
   - Users sign in via `/api/auth/google/start`
-  - Refresh tokens are encrypted and stored in a local SQLite DB
+  - Refresh tokens are encrypted and stored in MongoDB
 
 ### Frontend + redirect
 
@@ -83,10 +83,10 @@ All config lives in `.env`. The example file `backend/.env.example` documents ev
 
 ### Storage & security
 
-- `DB_PATH` – path to the SQLite DB file (default `./data/app.sqlite`)
+- `MONGODB_URI` – MongoDB connection string (e.g. `mongodb+srv://user:pass@cluster.mongodb.net/app?appName=...`). Required for the app to start.
 - `TOKEN_ENCRYPTION_KEY` – strong secret for encrypting stored refresh tokens (use a 32‑byte base64 string or similar)
 
-The SQLite DB stores: `users`, `google_tokens`, auth `sessions`, `chat_sessions`, and `chat_messages`. Chat history is persisted for logged‑in users; the History panel in the UI lets users browse and reopen past conversations.
+MongoDB collections: `users`, `google_tokens`, `sessions`, `chat_sessions`, `chat_messages`, `chat_metrics`, `user_settings`. All use auto-generated `_id` (ObjectId); `google_tokens` and `user_settings` also store `user_id` for one-doc-per-user lookups. Chat history is persisted for logged‑in users; the History panel in the UI lets users browse and reopen past conversations.
 
 ### Server
 
@@ -115,9 +115,9 @@ High‑level HTTP and WebSocket endpoints:
   - `GET /api/auth/google/start` – begin Google OAuth2 login
   - `GET /api/auth/google/callback` – OAuth2 callback
 
-- **Evaluation metrics**
-  - `POST /api/metrics/feedback` – record latency + optional rating/helpful/feedback for a chat session
-  - `GET /api/metrics/summary` – summary stats (count, avg latency, avg rating) for the current user
+- **Evaluation metrics** (recorded only when the user submits feedback, e.g. thumbs up/down)
+  - `POST /api/metrics/feedback` – record a metric with latency + optional rating/helpful/feedback for a chat session
+  - `GET /api/metrics/summary` – summary stats (count, avg latency, avg rating) over feedbacked responses for the current user
 
 - **MCP server config**
   - `GET /api/mcp/servers` – list configured MCP servers from `backend/mcp.config.json`
@@ -156,7 +156,7 @@ src/
 ├── app.js                 # Express app factory (middleware + routes + error handler); reusable
 ├── preload.js             # Loads dotenv and disables OpenAI tracing before any SDK
 ├── config/
-│   └── index.js           # Central config (port, frontendUrl, developerMode, logLevel, dbPath) from env
+│   └── index.js           # Central config (port, frontendUrl, developerMode, logLevel, mongodbUri) from env
 ├── routes/
 │   ├── index.js           # mountRoutes(app, options) – mounts all API routers
 │   ├── healthRoutes.js    # GET /api/health
@@ -171,9 +171,9 @@ src/
 │   └── requestContext.js  # AsyncLocalStorage for per-request context (used by MCP tools)
 ├── db/
 │   ├── db.js              # Barrel: initDb, sessions, users, chat, metrics, settings
-│   ├── client.js          # SQLite (sql.js) init and schema
+│   ├── client.js          # MongoDB client and indexes
 │   ├── users.js           # Users + encrypted Google tokens
-│   ├── authSessions.js    # Auth sessions table
+│   ├── authSessions.js    # Auth sessions (MongoDB)
 │   ├── chatSessions.js    # chat_sessions, chat_messages
 │   ├── metrics.js         # chat_metrics + summary
 │   └── userSettings.js    # User settings (e.g. OpenAI key override)
@@ -216,7 +216,7 @@ src/
 
 ### Reuse
 
-- **Config** – Import `config` from `./config/index.js` for port, frontendUrl, developerMode, logLevel, dbPath instead of reading `process.env` in multiple files.
+- **Config** – Import `config` from `./config/index.js` for port, frontendUrl, developerMode, logLevel, mongodbUri instead of reading `process.env` in multiple files.
 - **App** – Use `createApp()` from `./app.js` in tests or alternate entry points; same middleware and routes without starting the HTTP server.
 - **Routes** – All API routes are mounted from `routes/index.js` via `mountRoutes(app, options)`.
 - **MCP** – Tool registration lives in `mcp/registerTools.js`; `mcp/server.js` stays a thin entry (create server, register tools, connect transport).

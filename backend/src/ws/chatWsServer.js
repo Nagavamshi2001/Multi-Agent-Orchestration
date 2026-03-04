@@ -3,14 +3,13 @@ import { createOrchestratorAgent } from '../agents/orchestrator.js';
 import { runAgent, resolveOpenAIConfig } from '../utils/openaiRun.js';
 import {
   getUserBySessionId,
-  ensureChatSession,
   addChatMessage,
   getChatMessagesForAgentContext,
 } from '../db/db.js';
 import { parseCookies, SESSION_COOKIE } from '../auth/session.js';
 import { runWithContext } from '../auth/requestContext.js';
 import { resolveGoogleContext } from '../auth/googleContext.js';
-import { getHistory, addToHistory, formatHistory } from '../chat/conversationMemory.js';
+import { getHistory, addToHistory, formatHistoryWithDateTime } from '../chat/conversationMemory.js';
 import { logger } from '../utils/logger.js';
 
 export const attachChatWebSocketServer = ({ server, developerMode }) => {
@@ -67,7 +66,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         return;
       }
 
-      const openaiConfig = resolveOpenAIConfig(wsUserId, developerMode);
+      const openaiConfig = await resolveOpenAIConfig(wsUserId, developerMode);
       if (!openaiConfig.apiKey) {
         ws.send(JSON.stringify({ type: 'error', message: 'OpenAI API key not configured. Set it in Settings or in server .env.' }));
         return;
@@ -79,17 +78,18 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         const trimmed = message.trim();
 
         let history = null;
+        let effectiveSessionId = clientSessionId;
         if (wsUserId) {
           logger.debug('ws.chat.history.db', { userId: wsUserId, sessionId: clientSessionId });
-          await ensureChatSession({ chatSessionId: clientSessionId, userId: wsUserId });
-          await addChatMessage({
+          const userMsg = await addChatMessage({
             chatSessionId: clientSessionId,
             userId: wsUserId,
             role: 'user',
             content: trimmed,
           });
+          effectiveSessionId = userMsg.sessionId || clientSessionId;
           history = await getChatMessagesForAgentContext({
-            chatSessionId: clientSessionId,
+            chatSessionId: effectiveSessionId,
             userId: wsUserId,
             limit: 20,
           });
@@ -98,7 +98,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
           addToHistory(clientSessionId, 'user', trimmed);
           history = getHistory(clientSessionId);
         }
-        const agentInput = formatHistory(history);
+        const agentInput = formatHistoryWithDateTime(history);
 
         // Use streaming mode to capture intermediate events (traces/thoughts)
         const googleCtx = await resolveGoogleContext({
@@ -128,6 +128,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             search_emails: 'Searching your inbox...',
             delegate_to_email_assistant: 'Consulting the Email Assistant...',
             list_upcoming_events: 'Fetching your upcoming events...',
+            list_today_events: "Fetching today's events...",
             create_calendar_event: 'Creating calendar event...',
             delete_calendar_event: 'Deleting calendar event...',
             search_calendar_events: 'Searching your calendar...',
@@ -170,7 +171,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   agentName: lastAgentName,
                   tool: toolName,
                   message: getFriendlyToolMessage(toolName),
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'handoff_requested') {
@@ -182,7 +183,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'handoff_init',
                   agentName: lastAgentName,
                   message: `Decided to route to ${targetAgent.replace(/delegate_to_/g, '').replace(/_/g, ' ')}...`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'handoff_occurred') {
@@ -193,7 +194,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'handoff',
                   agentName: targetAgentName,
                   message: `Switched to ${targetAgentName}`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'reasoning_item_created') {
@@ -217,7 +218,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   step: 'reasoning',
                   agentName: lastAgentName,
                   message: reasoningText,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             } else if (name === 'tool_output') {
@@ -230,7 +231,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
                   agentName: lastAgentName,
                   tool: toolName,
                   message: `Completed action: ${toolName.replace(/delegate_to_/g, '').replace(/_/g, ' ')}`,
-                  sessionId: clientSessionId,
+                  sessionId: effectiveSessionId,
                 })
               );
             }
@@ -243,11 +244,11 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
         if (wsUserId) {
           logger.debug('ws.chat.message.persist', {
             userId: wsUserId,
-            sessionId: clientSessionId,
+            sessionId: effectiveSessionId,
             agentName: finalAgentName,
           });
           await addChatMessage({
-            chatSessionId: clientSessionId,
+            chatSessionId: effectiveSessionId,
             userId: wsUserId,
             role: 'assistant',
             content: finalReply,
@@ -262,7 +263,7 @@ export const attachChatWebSocketServer = ({ server, developerMode }) => {
             type: 'response',
             reply: finalReply,
             agentName: finalAgentName,
-            sessionId: clientSessionId,
+            sessionId: effectiveSessionId,
           })
         );
       } catch (err) {

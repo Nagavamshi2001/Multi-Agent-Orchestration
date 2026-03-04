@@ -16,8 +16,8 @@ A production-quality multi-agent system powered by the **OpenAI Agents SDK** wit
 ┌───────────────────────────────────────────────────┐
 │            Node.js Express Server                  │  ← Port 3001
 │  ┌─────────────────────────────────────────────┐ │
-│  │  SQLite (sql.js) — users, chat_sessions,     │ │
-│  │  chat_messages (persistent history)          │ │
+│  │  MongoDB — users, sessions, chat_sessions,  │ │
+│  │  chat_messages, chat_metrics, user_settings  │ │
 │  └─────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────┐ │
 │  │            Orchestrator Agent               │ │
@@ -53,6 +53,7 @@ cp .env.example .env   # Then edit .env with your keys
 
 Edit `backend/.env`:
 ```env
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/app?appName=...
 OPENAI_API_KEY=sk-your-actual-openai-key
 GMAIL_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GMAIL_CLIENT_SECRET=your-secret
@@ -102,7 +103,7 @@ This project supports **two modes**:
 
 - Set `DEVELOPER_MODE=false`
 - Users click **Login** in the UI, which starts OAuth at `/api/auth/google/start`
-- The server stores each user’s refresh token in a **local SQLite file** (`DB_PATH`) encrypted using `TOKEN_ENCRYPTION_KEY`
+- The server stores each user’s refresh token in **MongoDB** encrypted using `TOKEN_ENCRYPTION_KEY`
 
 #### Steps
 
@@ -114,7 +115,7 @@ This project supports **two modes**:
    - `GMAIL_CLIENT_SECRET`
    - `FRONTEND_URL` (default `http://localhost:5173`)
    - `TOKEN_ENCRYPTION_KEY` (strong secret)
-   - `DB_PATH` (default `./data/app.sqlite`)
+   - `MONGODB_URI` (MongoDB connection string, e.g. Atlas)
 
 ---
 
@@ -160,8 +161,8 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 | `POST` | `/api/mcp/servers` | Add or update an MCP server entry |
 | `GET` | `/api/settings` | User settings (model, OpenAI key presence) — auth required |
 | `PUT` | `/api/settings` | Update user settings (e.g. OpenAI key override, model) — auth required |
-| `POST` | `/api/metrics/feedback` | Store latency + optional rating/helpful/feedback for a chat session |
-| `GET` | `/api/metrics/summary` | Summary metrics (total, avg latency, avg rating) for current user |
+| `POST` | `/api/metrics/feedback` | Record a metric when the user submits feedback (thumbs up/down); includes latency, optional rating/helpful/feedback |
+| `GET` | `/api/metrics/summary` | Summary metrics (total, avg latency, avg rating) for current user — only over feedbacked responses |
 | `WS` | `/ws` | WebSocket chat connection with streaming traces |
 
 ---
@@ -173,9 +174,13 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 Logged-in users can manage preferences from the **Settings** panel in the UI (sidebar → Settings):
 
 - **OpenAI API key** — Optional per-user override; if set, the backend uses it for that user’s chat requests instead of the server’s `OPENAI_API_KEY`.
-- **Model** — Choose the chat model (e.g. `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`). Stored per user in SQLite.
+- **Model** — Choose the chat model (e.g. `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`). Stored per user in MongoDB.
 
-Settings are persisted in the backend (`user_settings` table) and exposed via `GET /api/settings` and `PUT /api/settings` (auth required).
+Settings are persisted in the backend (MongoDB `user_settings` collection) and exposed via `GET /api/settings` and `PUT /api/settings` (auth required).
+
+### Metrics
+
+Evaluation metrics (latency, rating, helpful) are **recorded only when the user submits feedback** (e.g. thumbs up/down on an assistant message). No metric row is created on every response. The summary at `GET /api/metrics/summary` aggregates over these feedbacked responses.
 
 ### Integrations (MCP)
 
@@ -221,7 +226,7 @@ Tool definitions live in `backend/src/tools/registry.js`; `backend/src/mcp/regis
 | News | gnews (Google News RSS) |
 | Web Search | duck-duck-scrape |
 | Backend | Node.js, Express, WebSocket (ws) |
-| Database | SQLite (sql.js) — users, auth sessions, chat_sessions, chat_messages, user_settings |
+| Database | MongoDB — users, google_tokens, sessions, chat_sessions, chat_messages, chat_metrics, user_settings |
 | Frontend | Vue 3, Vite, Axios |
 | Styling | Vanilla CSS (glassmorphism dark theme) |
 
