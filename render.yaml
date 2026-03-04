@@ -29,7 +29,7 @@ services:
       - key: GMAIL_USER_EMAIL
         sync: false
       - key: TOKEN_ENCRYPTION_KEY
-        generateValue: true
+        sync: false
       - key: MONGODB_URI
         sync: false
       - key: DEVELOPER_MODE
