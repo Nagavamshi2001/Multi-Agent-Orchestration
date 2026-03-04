@@ -17,12 +17,17 @@ export const createSession = async ({ userId, ttlMs }) => {
 };
 
 export const deleteSession = async (sessionId) => {
+  if (typeof sessionId !== 'string' || !ObjectId.isValid(sessionId)) return;
   const sessions = getCollection('sessions');
   await sessions.deleteOne({ _id: new ObjectId(sessionId) });
   logger.debug('db.sessions.delete', { sessionId });
 };
 
 export const getUserBySessionId = async (sessionId) => {
+  if (typeof sessionId !== 'string' || !ObjectId.isValid(sessionId)) {
+    logger.debug('db.sessions.getUserBySessionId.invalidId', { sessionId: sessionId ? '[present]' : '[empty]' });
+    return null;
+  }
   const ts = nowMs();
   const sessions = getCollection('sessions');
   const session = await sessions.findOne({

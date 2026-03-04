@@ -27,8 +27,8 @@ export const getSessionIdFromReq = (req) => {
 
 export const attachUser = async (req, _res, next) => {
   const sessionId = getSessionIdFromReq(req);
-  if (!sessionId) {
-    logger.debug('session.attach.none', { path: req.path, method: req.method });
+  if (!sessionId || typeof sessionId !== 'string' || sessionId.length !== 24 || !/^[a-fA-F0-9]{24}$/.test(sessionId)) {
+    if (sessionId) logger.debug('session.attach.invalidId', { path: req.path, method: req.method });
     req.user = null;
     req.sessionId = null;
     return next();
