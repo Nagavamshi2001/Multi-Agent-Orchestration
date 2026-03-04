@@ -1,6 +1,6 @@
 {
   "name": "multi-agent-email-orchestrator-backend",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-level agent orchestrator with Email Assistant sub-agent using OpenAI Agents SDK",
   "main": "src/server.js",
   "type": "module",
