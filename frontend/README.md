@@ -1,6 +1,12 @@
 # Frontend – AI Agent Hub (Vue 3 + Vite)
 
-This is the **chat UI** for the multi-agent orchestrator. It connects to the Node.js backend over **HTTP** and **WebSocket** to let you talk to the orchestrator and its sub‑agents (email, calendar, tasks, **YouTube & music**, news, search, etc.). When the YouTube agent returns video results, the UI shows **video cards** and an **inline player** (modal with YouTube embed); if you asked to "play" a video or song, the first result **auto-opens and autoplays**.
+This is the **world-class chat UI** for the multi-agent orchestrator, built with a sleek "Neon & Cyber" aesthetic. It connects to the Node.js backend over **HTTP** and **WebSocket** to let you talk to the orchestrator and its sub‑agents (email, calendar, tasks, **YouTube & music**, news, search, etc.). 
+
+Key UX/UI features:
+- **Persistent Sidebar**: Manages chat history, integrations, settings, and user profile.
+- **Thought Process Trace**: An elegant, animated accordion showing the exact steps the AI takes.
+- **Rich Media Cards**: Video and document results display as beautiful glassmorphism cards.
+- **Inline YouTube Player**: Videos play directly inline within the chat stream, rather than in jarring modals. (Auto-opens and autoplays if you ask to "play" a video or song).
 
 ## Prerequisites
 

@@ -37,6 +37,8 @@ There is a need for a **single conversational interface** that understands inten
 ## Scope
 
 ### In Scope
+- **Authentication**: Dual-mode login supporting both **Google SSO** (OAuth2) and **Email/Password** (Local Auth) with secure session management.
+- **User Profile**: Profile management including password updates and account settings.
 - Email management (read, send, search) via Gmail API
 - Calendar management (list, create, delete, search events) via Google Calendar API
 - Task management (list, create, complete, delete) via Google Tasks API
@@ -70,7 +72,8 @@ There is a need for a **single conversational interface** that understands inten
 | **Chat History** | Persistent storage of conversations; users can view, reopen, and continue past sessions via the History panel |
 | **Personalisation** | All Google services use the authenticated user’s own data |
 | **MCP** | Backend runs as MCP server (stdio); tools from registry exposed via MCP; UI Integrations panel to manage MCP server config |
-| **User Settings** | Per-user settings (OpenAI key override, model selection) stored in MongoDB; Settings panel in the UI |
+| **User Settings** | Per-user settings (OpenAI key override, model selection) stored in MongoDB; Settings panel in the UI with **Password Management** |
+| **Authentication** | Secure login via **Google SSO** or **Email/Password**; session-based auth with secure cookies |
 
 ---
 
@@ -118,8 +121,8 @@ API: GET/POST /api/mcp/servers (mcp.config.json); GET/PUT /api/settings (user_se
 
 ## Deliverables
 
-1. **Backend** — REST API and WebSocket server with orchestrator and six sub-agents (Email, Calendar, Tasks, **YouTube**, News, Search); MongoDB-backed user and chat history (including `videos` on assistant messages for YouTube); WebSocket response includes `videos` when YouTube agent returns a list; MCP stdio server and `/api/mcp/servers` for MCP config; `/api/settings` for per-user settings (OpenAI key, model). Reusable **utils** (e.g. `youtubeHelpers` for video normalization and stream tool-output parsing, `toolDisplay` for friendly tool names and stream-item helpers) keep tools and WebSocket logic maintainable.
-2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, **YouTube video cards and inline player** (with autoplay when user asks to "play"), History panel to browse and reopen past conversations (with video cards restored), Integrations panel for MCP servers, Settings panel for user preferences; inline thumbs-up/down feedback for assistant responses. **Utils** (messageUtils, formatUtils, agentDisplay), **composables** (useWebSocketChat, useNavigation), and split **components** (ThinkingIndicator, ExecutionTrace, YouTubeVideoList, etc.) keep the chat UI modular and testable.
+1. **Backend** — REST API and WebSocket server with orchestrator and six sub-agents (Email, Calendar, Tasks, **YouTube**, News, Search); **Dual Authentication** (Google SSO + Email/Password) with `bcrypt` password hashing; MongoDB-backed user and chat history (including `videos` on assistant messages for YouTube); WebSocket response includes `videos` when YouTube agent returns a list; MCP stdio server and `/api/mcp/servers` for MCP config; `/api/settings` for per-user settings (OpenAI key, model). Reusable **utils** (e.g. `youtubeHelpers` for video normalization and stream tool-output parsing, `toolDisplay` for friendly tool names and stream-item helpers) keep tools and WebSocket logic maintainable.
+2. **Frontend** — Vue.js chat interface with conversation starters, real-time traces, per-message latency display, **YouTube video cards and inline player** (with autoplay when user asks to "play"), History panel to browse and reopen past conversations (with video cards restored), Integrations panel for MCP servers, Settings panel for user preferences (**including Password Management**); **Unified Login Modal** for SSO and Email/Password; inline thumbs-up/down feedback for assistant responses. **Utils** (messageUtils, formatUtils, agentDisplay), **composables** (useWebSocketChat, useNavigation), and split **components** (ThinkingIndicator, ExecutionTrace, YouTubeVideoList, etc.) keep the chat UI modular and testable.
 3. **Documentation** — Root README, backend and frontend READMEs, setup instructions, and this project summary
 4. **Configuration** — Environment template for API keys, OAuth credentials, and `MONGODB_URI`; `mcp.config.json` for MCP server entries
 5. **Evaluation metrics** — `chat_metrics` records are created only when the user submits feedback (e.g. thumbs up/down) via the UI; summary endpoint reports count, avg latency, and avg rating over those feedbacked responses

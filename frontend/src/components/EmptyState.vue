@@ -1,6 +1,12 @@
 <template>
   <div class="empty-state">
-    <div class="empty-orb" aria-hidden="true">✦</div>
+    <div class="empty-orb" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="empty-orb-svg">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+    </div>
     <h2 class="empty-title">How can I help you today?</h2>
     <p class="empty-subtitle">I can help with</p>
     <div class="capability-pills" role="list" aria-label="Available capabilities">
@@ -85,15 +91,19 @@ defineEmits(['suggestion']);
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: linear-gradient(145deg, var(--color-primary), var(--color-secondary));
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.75rem;
-  color: white;
   box-shadow: 0 0 32px var(--color-primary-glow), 0 4px 24px rgba(0, 0, 0, 0.2);
   margin-bottom: 20px;
   animation: float 5s ease-in-out infinite;
+}
+.empty-orb-svg {
+  width: 36px;
+  height: 36px;
+  color: var(--color-primary);
 }
 @keyframes float {
   0%, 100% { transform: translateY(0); }

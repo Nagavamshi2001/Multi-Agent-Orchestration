@@ -1,14 +1,26 @@
 import { ObjectId } from 'mongodb';
 import { getCollection, nowMs } from './client.js';
 
-export const upsertUserByGoogleSub = async ({ googleSub, email, name, picture }) => {
+export const upsertUserByGoogleSub = async ({ googleSub, email, name, picture, linkUserId }) => {
   const users = getCollection('users');
-  const existing = await users.findOne({ google_sub: googleSub });
   const ts = nowMs();
+
+  // If a specific userId is provided (user is already logged in with local auth)
+  if (linkUserId) {
+    await users.updateOne(
+      { _id: new ObjectId(linkUserId) },
+      { $set: { google_sub: googleSub, name: name || undefined, picture: picture || undefined, updated_at: ts } }
+    );
+    return linkUserId;
+  }
+
+  // Otherwise, find existing user by google_sub or email
+  const existing = await users.findOne({ $or: [{ google_sub: googleSub }, { email }] });
+  
   if (existing) {
     await users.updateOne(
       { _id: existing._id },
-      { $set: { email, name: name || null, picture: picture || null, updated_at: ts } }
+      { $set: { google_sub: googleSub, email, name: name || existing.name || null, picture: picture || existing.picture || null, updated_at: ts } }
     );
     return existing._id.toString();
   }
@@ -23,14 +35,57 @@ export const upsertUserByGoogleSub = async ({ googleSub, email, name, picture })
   return result.insertedId.toString();
 };
 
+export const createUserWithPassword = async ({ email, passwordHash, name }) => {
+  const users = getCollection('users');
+  const ts = nowMs();
+  const result = await users.insertOne({
+    email,
+    password_hash: passwordHash,
+    name: name || null,
+    created_at: ts,
+    updated_at: ts,
+  });
+  return result.insertedId.toString();
+};
+
+export const getUserByEmail = async (email) => {
+  const users = getCollection('users');
+  const row = await users.findOne({ email });
+  if (!row) return null;
+  return {
+    id: row._id.toString(),
+    email: row.email,
+    name: row.name,
+    picture: row.picture,
+    password_hash: row.password_hash,
+    google_sub: row.google_sub
+  };
+};
+
 export const getUserById = async (userId) => {
   const users = getCollection('users');
   const row = await users.findOne(
     { _id: new ObjectId(userId) },
-    { projection: { google_sub: 1, email: 1, name: 1, picture: 1 } }
+    { projection: { google_sub: 1, email: 1, name: 1, picture: 1, password_hash: 1 } }
   );
   if (!row) return null;
-  return { id: row._id.toString(), google_sub: row.google_sub, email: row.email, name: row.name, picture: row.picture };
+  return {
+    id: row._id.toString(),
+    google_sub: row.google_sub,
+    email: row.email,
+    name: row.name,
+    picture: row.picture,
+    has_password: !!row.password_hash,
+  };
+};
+
+export const updateUserPassword = async (userId, passwordHash) => {
+  const users = getCollection('users');
+  const ts = nowMs();
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { password_hash: passwordHash, updated_at: ts } }
+  );
 };
 
 export const upsertGoogleTokens = async ({
@@ -78,4 +133,20 @@ export const getGoogleTokensByUserId = async (userId) => {
     access_token_enc: row.access_token_enc,
     expiry_date: row.expiry_date,
   };
+};
+
+export const unlinkGoogleFromUser = async (userId) => {
+  const users = getCollection('users');
+  const tokens = getCollection('google_tokens');
+  const ts = nowMs();
+  
+  await users.updateOne(
+    { _id: new ObjectId(userId) },
+    { 
+      $unset: { google_sub: "" }, 
+      $set: { updated_at: ts } 
+    }
+  );
+  
+  await tokens.deleteMany({ user_id: userId });
 };

@@ -8,14 +8,18 @@
  * @param {object} [message] - Full message object (e.g. for videos → YouTube icon)
  * @returns {string}
  */
-export function getAgentIcon(agentName, message = null) {
+export function getAgentType(agentName, message = null) {
   const name = (agentName || '').toLowerCase();
-  if (name.includes('email')) return '📧';
-  if (name.includes('calendar')) return '📅';
-  if (name.includes('youtube') || (message?.videos?.length)) return '🎬';
-  if (name.includes('docs') || (message?.docs?.length)) return '📄';
-  if (name.includes('sheets') || (message?.sheets?.length)) return '📊';
-  return '🤖';
+  if (name.includes('email')) return 'email';
+  if (name.includes('calendar')) return 'calendar';
+  if (name.includes('youtube') || (message?.videos?.length)) return 'youtube';
+  if (name.includes('docs') || (message?.docs?.length)) return 'docs';
+  if (name.includes('sheets') || (message?.sheets?.length)) return 'sheets';
+  if (name.includes('tasks')) return 'tasks';
+  if (name.includes('news')) return 'news';
+  if (name.includes('search')) return 'search';
+  if (name.includes('orchestrator')) return 'orchestrator';
+  return 'default';
 }
 
 /**

@@ -74,9 +74,10 @@ All config lives in `.env`. The example file `backend/.env.example` documents ev
   - Single‑user flow
   - Uses `GMAIL_REFRESH_TOKEN` + `GMAIL_USER_EMAIL` from `.env`
 - `DEVELOPER_MODE=false`
-  - Multi‑user Google SSO
-  - Users sign in via `/api/auth/google/start`
-  - Refresh tokens are encrypted and stored in MongoDB
+  - Multi‑user mode with Google SSO and Email/Password login
+  - Google SSO: `/api/auth/google/start`
+  - Local Auth: `/api/auth/login` & `/api/auth/register`
+  - Refresh tokens and password hashes are encrypted and stored in MongoDB
 
 ### Frontend + redirect
 
@@ -116,6 +117,9 @@ High‑level HTTP and WebSocket endpoints:
   - `POST /api/auth/logout` – logout
   - `GET /api/auth/google/start` – begin Google OAuth2 login
   - `GET /api/auth/google/callback` – OAuth2 callback
+  - `POST /api/auth/register` – Register new account (email/password)
+  - `POST /api/auth/login` – Login (email/password)
+  - `POST /api/auth/change-password` – Change password (requires auth)
 
 - **Evaluation metrics** (recorded only when the user submits feedback, e.g. thumbs up/down)
   - `POST /api/metrics/feedback` – record a metric with latency + optional rating/helpful/feedback for a chat session

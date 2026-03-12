@@ -1,16 +1,16 @@
-# 🤖 Personalised Multi-Agent Orchestration System
+# 🤖 Agent Hub: Personalised Multi-Agent Orchestration System
 
 **Current release:** `v1.3.0`
 
-A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, **YouTube & music** (YouTube Data API v3), news retrieval, and web search through natural language. The chat UI shows **video cards** for YouTube results and can **play videos/songs inline** (including auto-open and autoplay when you ask to "play" something).
+A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a world-class **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, **YouTube & music** (YouTube Data API v3), news retrieval, and web search through natural language. The chat UI shows rich **video/document cards** for results and can **play videos/songs inline** (including auto-open and autoplay when you ask to "play" something), all wrapped in a sleek "Neon & Cyber" aesthetic.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
 │           Vue.js Chat Interface          │  ← Port 5173
-│  (Dark glassmorphism, History, video   │
-│   cards + inline YouTube player)        │
+│  (Neon & Cyber UI, History, inline       │
+│   video player, thought process trace)  │
 └──────────────┬──────────────────────────┘
                │ HTTP REST / WebSocket
                ▼
@@ -100,13 +100,13 @@ This project supports **two modes**:
   - `GMAIL_REFRESH_TOKEN`
   - `GMAIL_USER_EMAIL`
 
-### Mode B — Multi-user Google SSO (recommended)
+### Mode B — Multi-user (recommended)
 
 - Set `DEVELOPER_MODE=false`
-- Users click **Login** in the UI, which starts OAuth at `/api/auth/google/start`
-- The server stores each user’s refresh token in **MongoDB** encrypted using `TOKEN_ENCRYPTION_KEY`
+- Users can sign in via **Google SSO** (OAuth2) or **Email/Password**.
+- The server stores refresh tokens (encrypted) and password hashes (bcrypt) in **MongoDB**.
 
-#### Steps
+#### Setup for Google SSO
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project → Enable **Gmail API**, **Google Calendar API**, **Google Tasks API**, and **YouTube Data API v3**
@@ -161,6 +161,9 @@ High‑level HTTP and WebSocket endpoints exposed by the backend:
 | `POST` | `/api/auth/logout` | Logout |
 | `GET` | `/api/auth/google/start` | Start Google OAuth2 login |
 | `GET` | `/api/auth/google/callback` | OAuth2 callback |
+| `POST` | `/api/auth/register` | Register new account (email/password) |
+| `POST` | `/api/auth/login` | Login (email/password) |
+| `POST` | `/api/auth/change-password` | Change password (requires auth) |
 | `GET` | `/api/mcp/servers` | List configured MCP servers (`mcp.config.json`) |
 | `POST` | `/api/mcp/servers` | Add or update an MCP server entry |
 | `GET` | `/api/settings` | User settings (model, OpenAI key presence) — auth required |

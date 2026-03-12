@@ -23,19 +23,19 @@
           <div class="status-row">
             <span
               class="status-chip"
-              :class="me ? 'connected' : 'disconnected'"
+              :class="me?.google_sub ? 'connected' : 'disconnected'"
             >
               <span class="dot"></span>
-              {{ me ? 'Connected' : 'Not connected' }}
+              {{ me?.google_sub ? 'Connected' : 'Not connected' }}
             </span>
             <span class="status-detail">
-              {{ me ? me.email : 'Sign in with Google to enable workspace tools.' }}
+              {{ me?.google_sub ? me.email : 'Sign in with Google to enable workspace tools.' }}
             </span>
           </div>
         </div>
         <div class="integration-footer">
           <button class="btn primary" @click="handleGoogleClick">
-            {{ me ? 'Logout' : 'Connect Google' }}
+            {{ me?.google_sub ? 'Disconnect' : 'Connect Google' }}
           </button>
         </div>
       </article>
@@ -210,6 +210,7 @@ import {
   getMcpServers,
   saveMcpServer,
   logout,
+  disconnectGoogle,
 } from '../services/api.js';
 
 const me = ref(null);
@@ -238,18 +239,29 @@ const fetchMe = async () => {
 };
 
 const handleGoogleClick = async () => {
-  if (!me.value) {
+  if (!me.value?.google_sub) {
     const returnTo = window.location.href;
     window.location.href = `${API_BASE}/api/auth/google/start?returnTo=${encodeURIComponent(
       returnTo,
     )}`;
   } else {
     try {
-      await logout();
-    } catch {
-      // ignore logout failures
+      // Disconnect Google from the user's account
+      await disconnectGoogle();
+      
+      // If the user doesn't have a password set up, they were purely using SSO.
+      // Now that they disconnected, they can't log in anymore, so log them out.
+      if (!me.value?.has_password) {
+        await logout();
+        me.value = null;
+        window.location.href = '/?login=true';
+      } else {
+        // Otherwise, just fetch updated user state
+        await fetchMe();
+      }
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
     }
-    me.value = null;
   }
 };
 

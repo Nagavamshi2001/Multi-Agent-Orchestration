@@ -3,6 +3,21 @@ import { logger } from '../utils/logger.js';
 
 export const SESSION_COOKIE = 'sk_session';
 
+const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
+
+/** When frontend is on a different origin (HTTPS in prod), cookies must be SameSite=None; Secure for cross-origin requests. */
+export const getSessionCookieOptions = () => {
+  const frontendUrl = getFrontendUrl();
+  const isCrossOrigin = frontendUrl.startsWith('https://');
+  return {
+    httpOnly: true,
+    sameSite: isCrossOrigin ? 'none' : 'lax',
+    secure: isCrossOrigin,
+    path: '/',
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+  };
+};
+
 export const parseCookies = (cookieHeader) => {
   const out = {};
   if (!cookieHeader) return out;

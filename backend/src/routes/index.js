@@ -4,6 +4,7 @@
  * @param {{ developerMode: boolean }} options
  */
 import { googleAuthRouter } from '../auth/googleRoutes.js';
+import { localAuthRouter } from '../auth/localRoutes.js';
 import { healthRouter } from './healthRoutes.js';
 import { chatRouter } from './chatRoutes.js';
 import { metricsRouter } from './metricsRoutes.js';
@@ -13,6 +14,7 @@ import { settingsRouter } from './settingsRoutes.js';
 export function mountRoutes(app, options = {}) {
   const { developerMode = false } = options;
   app.use('/api/auth', googleAuthRouter());
+  app.use('/api/auth', localAuthRouter());
   app.use('/api', healthRouter());
   app.use('/api', chatRouter({ developerMode }));
   app.use('/api', metricsRouter());

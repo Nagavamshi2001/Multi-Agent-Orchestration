@@ -2,8 +2,8 @@ import express from 'express';
 import { google } from 'googleapis';
 import { ObjectId } from 'mongodb';
 import { encryptSecret } from '../utils/tokenCrypto.js';
-import { upsertUserByGoogleSub, upsertGoogleTokens, createSession, deleteSession, getGoogleTokensByUserId } from '../db/db.js';
-import { SESSION_COOKIE, getSessionIdFromReq } from './session.js';
+import { upsertUserByGoogleSub, upsertGoogleTokens, createSession, deleteSession, getGoogleTokensByUserId, unlinkGoogleFromUser } from '../db/db.js';
+import { SESSION_COOKIE, getSessionIdFromReq, getSessionCookieOptions } from './session.js';
 import { logger } from '../utils/logger.js';
 
 const OAUTH_STATE_COOKIE = 'sk_oauth_state';
@@ -24,19 +24,6 @@ const isSecureRequest = (req) => {
 };
 
 const getFrontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
-
-/** When frontend is on a different origin (HTTPS in prod), cookies must be SameSite=None; Secure for cross-origin requests. */
-const getSessionCookieOptions = () => {
-  const frontendUrl = getFrontendUrl();
-  const isCrossOrigin = frontendUrl.startsWith('https://');
-  return {
-    httpOnly: true,
-    sameSite: isCrossOrigin ? 'none' : 'lax',
-    secure: isCrossOrigin,
-    path: '/',
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-  };
-};
 
 const getOAuthClient = (req) =>
   new google.auth.OAuth2(
@@ -125,12 +112,27 @@ export const googleAuthRouter = () => {
         return res.status(500).send('Failed to fetch Google user profile.');
       }
 
-      const userId = await upsertUserByGoogleSub({
-        googleSub: profile.id,
-        email: profile.email,
-        name: profile.name || '',
-        picture: profile.picture || '',
-      });
+      const existingUser = req.user; // If the user is already logged in
+
+      let userId;
+      if (existingUser) {
+        // They are logged in, link google account to current user
+        userId = existingUser.id;
+        await upsertUserByGoogleSub({
+          googleSub: profile.id,
+          email: profile.email,
+          name: profile.name || '',
+          picture: profile.picture || '',
+          linkUserId: userId
+        });
+      } else {
+        userId = await upsertUserByGoogleSub({
+          googleSub: profile.id,
+          email: profile.email,
+          name: profile.name || '',
+          picture: profile.picture || '',
+        });
+      }
 
       const refreshToken = tokens.refresh_token;
       if (!refreshToken) {
@@ -157,18 +159,25 @@ export const googleAuthRouter = () => {
         expiryDate,
       });
 
-      const session = await createSession({ userId });
-      logger.info('oauth.callback.sessionCreated', {
-        userId,
-        email: profile.email,
-        sessionId: session.id,
-        expiresAt: session.expiresAt,
-      });
-
       res.clearCookie(OAUTH_STATE_COOKIE, { path: '/api/auth' });
       res.clearCookie(OAUTH_RETURN_COOKIE, { path: '/api/auth' });
 
-      res.cookie(SESSION_COOKIE, session.id, getSessionCookieOptions());
+      // If we are already logged in, we don't need to create a new session
+      if (!existingUser) {
+        const session = await createSession({ userId });
+        logger.info('oauth.callback.sessionCreated', {
+          userId,
+          email: profile.email,
+          sessionId: session.id,
+          expiresAt: session.expiresAt,
+        });
+        res.cookie(SESSION_COOKIE, session.id, getSessionCookieOptions());
+      } else {
+        logger.info('oauth.callback.accountLinked', {
+          userId,
+          email: profile.email,
+        });
+      }
 
       return res.redirect(returnTo);
     } catch (err) {
@@ -191,6 +200,21 @@ export const googleAuthRouter = () => {
     const opts = getSessionCookieOptions();
     res.clearCookie(SESSION_COOKIE, { path: opts.path, sameSite: opts.sameSite, secure: opts.secure });
     return res.json({ success: true });
+  });
+
+  router.post('/google/disconnect', async (req, res) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      await unlinkGoogleFromUser(req.user.id);
+      logger.info('oauth.disconnect.success', { userId: req.user.id });
+      return res.json({ success: true });
+    } catch (err) {
+      logger.error('oauth.disconnect.error', { error: err.message });
+      return res.status(500).json({ error: 'Failed to disconnect Google account' });
+    }
   });
 
   return router;

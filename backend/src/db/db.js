@@ -3,8 +3,12 @@ export { initDb, isDbReady } from './client.js';
 export {
   upsertUserByGoogleSub,
   getUserById,
+  getUserByEmail,
+  createUserWithPassword,
+  updateUserPassword,
   upsertGoogleTokens,
   getGoogleTokensByUserId,
+  unlinkGoogleFromUser,
 } from './users.js';
 export {
   createSession,

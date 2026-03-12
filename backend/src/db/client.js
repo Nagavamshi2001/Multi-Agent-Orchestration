@@ -8,7 +8,12 @@ export const nowMs = () => Date.now();
 
 async function createIndexes(database) {
   const users = database.collection('users');
-  await users.createIndex({ google_sub: 1 }, { unique: true });
+  try {
+    await users.dropIndex('google_sub_1');
+  } catch (e) {
+    if (e.code !== 27 && e.codeName !== 'IndexNotFound') throw e;
+  }
+  await users.createIndex({ google_sub: 1 }, { unique: true, sparse: true });
 
   const sessions = database.collection('sessions');
   await sessions.createIndex({ user_id: 1 });

@@ -41,7 +41,7 @@ export const getUserBySessionId = async (sessionId) => {
   const users = getCollection('users');
   const user = await users.findOne(
     { _id: new ObjectId(session.user_id) },
-    { projection: { email: 1, name: 1, picture: 1 } }
+    { projection: { email: 1, name: 1, picture: 1, password_hash: 1, google_sub: 1 } }
   );
   if (!user) return null;
   logger.debug('db.sessions.getUserBySessionId.hit', {
@@ -49,7 +49,14 @@ export const getUserBySessionId = async (sessionId) => {
     userId: session.user_id,
     email: user.email,
   });
-  return { id: session.user_id, email: user.email, name: user.name, picture: user.picture };
+  return { 
+    id: session.user_id, 
+    email: user.email, 
+    name: user.name, 
+    picture: user.picture,
+    has_password: !!user.password_hash,
+    google_sub: user.google_sub || null
+  };
 };
 
 export const cleanupExpiredSessions = async () => {

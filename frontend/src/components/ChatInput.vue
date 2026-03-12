@@ -52,24 +52,36 @@ defineExpose({ inputRef });
 
 <style scoped>
 .input-area {
-  padding: 16px 24px 20px;
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 760px;
+  padding: 0 16px;
   z-index: 10;
-  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .input-wrapper {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: var(--color-surface-2);
+  width: 100%;
+  background: rgba(24, 24, 27, 0.6); /* --color-surface with opacity */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  padding: 10px 10px 10px 18px;
+  padding: 12px 14px 12px 20px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
   transition: var(--transition);
 }
 .input-wrapper:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-glow);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .chat-input {
@@ -83,17 +95,17 @@ defineExpose({ inputRef });
   line-height: 1.5;
   resize: none;
   min-height: 24px;
-  max-height: 160px;
+  max-height: 200px;
 }
 .chat-input::placeholder { color: var(--color-text-muted); }
 .chat-input:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .send-btn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  border: 1px solid transparent;
   color: var(--color-text-muted);
   cursor: not-allowed;
   display: flex;
@@ -103,31 +115,29 @@ defineExpose({ inputRef });
   transition: var(--transition);
 }
 .send-btn.active {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-  border-color: transparent;
-  color: white;
+  background: var(--color-text);
+  color: var(--color-bg);
   cursor: pointer;
-  box-shadow: 0 4px 15px var(--color-primary-glow);
 }
 .send-btn.active:hover {
-  transform: scale(1.08);
-  box-shadow: 0 6px 20px var(--color-primary-glow);
+  transform: scale(1.05);
+  background: #fff;
 }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .input-hint {
-  margin-top: 8px;
-  font-size: 0.72rem;
+  margin-top: 10px;
+  font-size: 0.7rem;
   color: var(--color-text-muted);
   text-align: center;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 .input-hint kbd {
-  background: var(--color-surface);
+  background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 1px 4px;
   font-size: 0.65rem;
   font-family: monospace;
 }
