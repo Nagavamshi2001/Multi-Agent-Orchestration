@@ -1,6 +1,6 @@
 # 🤖 Personalised Multi-Agent Orchestration System
 
-**Current release:** `v1.2.0`
+**Current release:** `v1.3.0`
 
 A production-quality multi-agent system powered by the **OpenAI Agents SDK** with a **Vue.js** chat interface. Integrates Gmail, Google Calendar, Google Tasks, news retrieval, and web search through natural language.
 
