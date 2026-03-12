@@ -14,6 +14,9 @@ import {
   tasksToolDefs,
   newsToolDefs,
   searchToolDefs,
+  youtubeToolDefs,
+  docsToolDefs,
+  sheetsToolDefs,
 } from '../tools/registry.js';
 
 /**
@@ -52,4 +55,16 @@ export function getNewsTools(requestContext) {
 
 export function getSearchTools(requestContext) {
   return toAgentTools(searchToolDefs, requestContext);
+}
+
+export function getYouTubeTools(requestContext) {
+  return toAgentTools(youtubeToolDefs, requestContext);
+}
+
+export function getDocsTools(requestContext) {
+  return toAgentTools(docsToolDefs, requestContext);
+}
+
+export function getSheetsTools(requestContext) {
+  return toAgentTools(sheetsToolDefs, requestContext);
 }

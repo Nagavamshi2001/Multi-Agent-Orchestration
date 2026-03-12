@@ -47,6 +47,9 @@ const capabilities = [
   { id: 'tasks', name: 'Tasks', icon: '✅' },
   { id: 'news', name: 'News', icon: '📰' },
   { id: 'search', name: 'Web search', icon: '🔍' },
+  { id: 'youtube', name: 'YouTube', icon: '🎬' },
+  { id: 'docs', name: 'Docs', icon: '📄' },
+  { id: 'sheets', name: 'Sheets', icon: '📊' },
 ];
 
 const suggestions = [
@@ -55,6 +58,9 @@ const suggestions = [
   { icon: '✅', label: 'Tasks', category: 'tasks', text: "Show my tasks", hint: 'List, add or complete to-dos' },
   { icon: '📰', label: 'News', category: 'news', text: "What's the latest news?", hint: 'Headlines, search or news by topic' },
   { icon: '🔍', label: 'Search', category: 'search', text: 'Search the web for Node.js tutorials', hint: 'Look up anything on the web' },
+  { icon: '🎬', label: 'YouTube', category: 'youtube', text: 'Search YouTube for Vue.js tutorials', hint: 'Find and play YouTube videos' },
+  { icon: '📄', label: 'Docs', category: 'docs', text: 'List my recent Google Docs', hint: 'Browse, create or search your Docs' },
+  { icon: '📊', label: 'Sheets', category: 'sheets', text: 'Show my Google Sheets', hint: 'List, open or work with spreadsheets' },
   { icon: '🤖', label: 'Help', category: 'help', text: 'What can you do?', hint: 'See full list of capabilities' },
 ];
 
@@ -194,6 +200,9 @@ defineEmits(['suggestion']);
 .suggestion-chip--tasks .suggestion-chip-accent { background: var(--color-success); }
 .suggestion-chip--news .suggestion-chip-accent { background: var(--color-warning); }
 .suggestion-chip--search .suggestion-chip-accent { background: var(--color-accent); }
+.suggestion-chip--youtube .suggestion-chip-accent { background: #ff0000; }
+.suggestion-chip--docs .suggestion-chip-accent { background: #4285f4; }
+.suggestion-chip--sheets .suggestion-chip-accent { background: #0f9d58; }
 .suggestion-chip--help .suggestion-chip-accent { background: var(--color-primary); }
 
 .suggestion-chip-inner {

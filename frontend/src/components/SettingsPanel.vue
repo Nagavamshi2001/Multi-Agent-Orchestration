@@ -19,6 +19,17 @@
         @submit.prevent="save"
       >
         <div class="form-section">
+          <h3>Data privacy</h3>
+          <label class="field field-checkbox">
+            <input
+              v-model="form.allowAgentReadDocsSheets"
+              type="checkbox"
+            />
+            <span>Allow agent to read document and spreadsheet content</span>
+          </label>
+          <p class="form-desc">When enabled, the agent can summarize or answer questions about your Google Docs and Sheets content. When disabled (default), the agent only sees links and metadata.</p>
+        </div>
+        <div class="form-section">
           <h3>Add API key</h3>
           <p class="form-desc">Enter your OpenAI API key and choose a model. These are stored securely per account.</p>
           <label class="field">
@@ -54,6 +65,17 @@
         class="settings-form glass form-edit"
         @submit.prevent="save"
       >
+        <div class="form-section">
+          <h3>Data privacy</h3>
+          <label class="field field-checkbox">
+            <input
+              v-model="form.allowAgentReadDocsSheets"
+              type="checkbox"
+            />
+            <span>Allow agent to read document and spreadsheet content</span>
+          </label>
+          <p class="form-desc">When enabled, the agent can summarize or answer questions about your Google Docs and Sheets content. When disabled (default), the agent only sees links and metadata.</p>
+        </div>
         <div class="form-section">
           <h3>Edit existing</h3>
           <p class="form-desc">Update your saved key or model.</p>
@@ -98,7 +120,7 @@ import { ref, onMounted } from 'vue';
 import { getMe, getSettings, saveSettings } from '../services/api.js';
 
 const me = ref(null);
-const form = ref({ openaiApiKey: '', model: 'gpt-4o' });
+const form = ref({ openaiApiKey: '', model: 'gpt-4o', allowAgentReadDocsSheets: false });
 const models = ref(['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo']);
 const hasOpenaiKey = ref(false);
 const saving = ref(false);
@@ -129,6 +151,7 @@ const save = async () => {
     await saveSettings({
       openaiApiKey: form.value.openaiApiKey || undefined,
       model: form.value.model,
+      allowAgentReadDocsSheets: form.value.allowAgentReadDocsSheets,
     });
     hasOpenaiKey.value = true;
     form.value.openaiApiKey = '';
@@ -283,5 +306,20 @@ onMounted(load);
 
 .form-message.error {
   color: var(--color-error);
+}
+
+.field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.field-checkbox > span {
+  margin-bottom: 0;
 }
 </style>

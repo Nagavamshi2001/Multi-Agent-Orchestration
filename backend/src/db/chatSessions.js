@@ -88,7 +88,7 @@ export const clearChatSessionMessages = async ({ chatSessionId, userId } = {}) =
   );
 };
 
-export const addChatMessage = async ({ chatSessionId, userId, role, content, agentName } = {}) => {
+export const addChatMessage = async ({ chatSessionId, userId, role, content, agentName, videos, docs, sheets } = {}) => {
   if (!chatSessionId) throw new Error('chatSessionId is required');
   if (!userId) throw new Error('userId is required');
   if (!role) throw new Error('role is required');
@@ -100,13 +100,23 @@ export const addChatMessage = async ({ chatSessionId, userId, role, content, age
   const ts = nowMs();
   const chatMessages = getCollection('chat_messages');
   const chatSessions = getCollection('chat_sessions');
-  const result = await chatMessages.insertOne({
+  const doc = {
     chat_session_id: effectiveSessionId,
     role,
     content,
     agent_name: agentName || null,
     created_at: ts,
-  });
+  };
+  if (Array.isArray(videos) && videos.length > 0) {
+    doc.videos = videos;
+  }
+  if (Array.isArray(docs) && docs.length > 0) {
+    doc.docs = docs;
+  }
+  if (Array.isArray(sheets) && sheets.length > 0) {
+    doc.sheets = sheets;
+  }
+  const result = await chatMessages.insertOne(doc);
   const id = result.insertedId.toString();
   logger.debug('db.chat_messages.insert', {
     id,
@@ -195,7 +205,7 @@ export const getChatMessagesBySessionId = async ({ chatSessionId, userId, limit 
   const chatMessages = getCollection('chat_messages');
   const cursor = chatMessages.find(
     { chat_session_id: chatSessionId },
-    { projection: { role: 1, content: 1, agent_name: 1, created_at: 1 } }
+    { projection: { role: 1, content: 1, agent_name: 1, created_at: 1, videos: 1, docs: 1, sheets: 1 } }
   ).sort({ created_at: 1 }).skip(off).limit(lim);
   const rows = await cursor.toArray();
   return rows.map((r) => ({
@@ -204,6 +214,9 @@ export const getChatMessagesBySessionId = async ({ chatSessionId, userId, limit 
     content: r.content,
     agent_name: r.agent_name,
     created_at: r.created_at,
+    videos: r.videos || null,
+    docs: r.docs || null,
+    sheets: r.sheets || null,
   }));
 };
 

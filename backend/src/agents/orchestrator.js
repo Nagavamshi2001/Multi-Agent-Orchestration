@@ -4,6 +4,9 @@ import calendarAgent, { createCalendarAgent } from './calendarAgent.js';
 import tasksAgent, { createTasksAgent } from './tasksAgent.js';
 import newsAgent, { createNewsAgent } from './newsAgent.js';
 import searchAgent, { createSearchAgent } from './searchAgent.js';
+import youtubeAgent, { createYouTubeAgent } from './youtubeAgent.js';
+import docsAgent, { createDocsAgent } from './docsAgent.js';
+import sheetsAgent, { createSheetsAgent } from './sheetsAgent.js';
 
 // ─── Master Orchestrator Agent ────────────────────────────────────────────────
 const ORCHESTRATOR_INSTRUCTIONS = `You are a powerful AI Orchestrator that manages a team of specialized sub-agents.
@@ -47,15 +50,44 @@ or answer directly if the question is within your general knowledge.
   - News by location
 - **Example requests**: "What's the latest news?", "Search news about AI", "Tech news today", "News from India", "Business headlines"
 
+### 🎬 YouTube Assistant
+- **Trigger**: Any YouTube, music, songs, or YouTube Music related request
+- **Capabilities**:
+  - Get the user's YouTube channel and stats
+  - List the user's playlists and playlist videos
+  - Search YouTube for videos
+  - Search for music/songs (YouTube Music style)
+  - Get video details
+- **Example requests**: "Show my YouTube channel", "My playlists", "Search YouTube for React tutorials", "Play a song by [artist]", "Find music", "Play [song name]", "YouTube Music search"
+
+### 📄 Docs Assistant
+- **Trigger**: Any Google Docs related request (create doc, search docs, read doc content)
+- **Capabilities**:
+  - Create a new Google Doc with title and optional body text
+  - Search or list the user's Google Docs
+  - Get document content by ID
+- **Example requests**: "Create a doc called Meeting Notes", "Find my Google Docs", "Search my documents for budget", "Show me the content of doc X"
+
+### 📊 Sheets Assistant
+- **Trigger**: Any Google Sheets related request (create sheet, search sheets, read sheet data)
+- **Capabilities**:
+  - Create a new Google Sheet with title and optional sheet name
+  - Search or list the user's Google Sheets
+  - Read a range of values from a sheet
+- **Example requests**: "Create a spreadsheet for expenses", "Find my Google Sheets", "Search my spreadsheets", "What's in Sheet1 A1 to D10?"
+
 ## Decision Logic:
 1. If the user's request involves **emails** → delegate to **Email Assistant**
 2. If the user's request involves **calendar, events, meetings, schedule** → delegate to **Calendar Assistant**
 3. If the user's request involves **tasks, to-do, todo list, reminders** → delegate to **Tasks Assistant**
 4. If the user's request involves **news, headlines, current events** → delegate to **News Assistant**
-5. If the user wants to **search the web, look up, find online** → delegate to **Search Assistant**
-6. If the user asks about your capabilities or what you can do → explain your available sub-agents
-7. If the question is general knowledge → answer directly without delegating
-8. Always be transparent about which sub-agent you're delegating to
+5. If the user wants to **search the web, look up, find online** (general web) → delegate to **Search Assistant**
+6. If the user's request involves **YouTube, music, songs, play a song, find music, YouTube Music, playlists, channel** → delegate to **YouTube Assistant**
+7. If the user's request involves **Google Docs, document, create a doc, search docs, write a doc** → delegate to **Docs Assistant**
+8. If the user's request involves **Google Sheets, spreadsheet, create a sheet, search sheets, table data** → delegate to **Sheets Assistant**
+9. If the user asks about your capabilities or what you can do → explain your available sub-agents
+10. If the question is general knowledge → answer directly without delegating
+11. Always be transparent about which sub-agent you're delegating to
 
 ## Response Style:
 - Be professional, friendly, and clear
@@ -93,6 +125,21 @@ const orchestratorAgent = new Agent({
             toolDescriptionOverride:
                 'Delegate web search requests (look up, find online) to the Search Assistant agent.',
         }),
+        handoff(youtubeAgent, {
+            toolNameOverride: 'delegate_to_youtube_assistant',
+            toolDescriptionOverride:
+                'Delegate YouTube and music-related tasks (search videos, play music, playlists, channel) to the YouTube Assistant.',
+        }),
+        handoff(docsAgent, {
+            toolNameOverride: 'delegate_to_docs_assistant',
+            toolDescriptionOverride:
+                'Delegate Google Docs tasks (create doc, search docs, get doc content) to the Docs Assistant agent.',
+        }),
+        handoff(sheetsAgent, {
+            toolNameOverride: 'delegate_to_sheets_assistant',
+            toolDescriptionOverride:
+                'Delegate Google Sheets tasks (create spreadsheet, search spreadsheets, get sheet data) to the Sheets Assistant agent.',
+        }),
     ],
 });
 
@@ -106,6 +153,9 @@ export function createOrchestratorAgent(requestContext) {
   const tasks = createTasksAgent(requestContext);
   const news = createNewsAgent(requestContext);
   const search = createSearchAgent(requestContext);
+  const youtube = createYouTubeAgent(requestContext);
+  const docs = createDocsAgent(requestContext);
+  const sheets = createSheetsAgent(requestContext);
   return new Agent({
     name: 'Orchestrator',
     model: 'gpt-4o',
@@ -135,6 +185,21 @@ export function createOrchestratorAgent(requestContext) {
         toolNameOverride: 'delegate_to_search_assistant',
         toolDescriptionOverride:
           'Delegate web search requests (look up, find online) to the Search Assistant agent.',
+      }),
+      handoff(youtube, {
+        toolNameOverride: 'delegate_to_youtube_assistant',
+        toolDescriptionOverride:
+          'Delegate YouTube and music-related tasks (search videos, play music, playlists, channel) to the YouTube Assistant.',
+      }),
+      handoff(docs, {
+        toolNameOverride: 'delegate_to_docs_assistant',
+        toolDescriptionOverride:
+          'Delegate Google Docs tasks (create doc, search docs, get doc content) to the Docs Assistant agent.',
+      }),
+      handoff(sheets, {
+        toolNameOverride: 'delegate_to_sheets_assistant',
+        toolDescriptionOverride:
+          'Delegate Google Sheets tasks (create spreadsheet, search spreadsheets, get sheet data) to the Sheets Assistant agent.',
       }),
     ],
   });

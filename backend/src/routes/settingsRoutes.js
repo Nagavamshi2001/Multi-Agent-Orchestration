@@ -27,6 +27,7 @@ export const settingsRouter = () => {
         hasOpenaiKey: settings?.hasOpenaiKey ?? false,
         model: settings?.model ?? 'gpt-4o',
         models: MODELS,
+        allowAgentReadDocsSheets: settings?.allowAgentReadDocsSheets ?? false,
       };
       return res.json(payload);
     } catch (err) {
@@ -37,7 +38,7 @@ export const settingsRouter = () => {
 
   router.put('/settings', async (req, res) => {
     if (!requireUser(req, res)) return;
-    const { openaiApiKey, model } = req.body || {};
+    const { openaiApiKey, model, allowAgentReadDocsSheets } = req.body || {};
     try {
       const modelVal =
         typeof model === 'string' && model.trim() && MODELS.includes(model.trim())
@@ -49,11 +50,13 @@ export const settingsRouter = () => {
           : typeof openaiApiKey === 'string'
             ? openaiApiKey.trim() || null
             : null;
-      await upsertSettings(req.user.id, { openaiApiKey: keyVal, model: modelVal });
+      const allowReadVal = typeof allowAgentReadDocsSheets === 'boolean' ? allowAgentReadDocsSheets : undefined;
+      await upsertSettings(req.user.id, { openaiApiKey: keyVal, model: modelVal, allowAgentReadDocsSheets: allowReadVal });
       const updated = await getSettings(req.user.id);
       return res.json({
         hasOpenaiKey: updated?.hasOpenaiKey ?? false,
         model: updated?.model ?? 'gpt-4o',
+        allowAgentReadDocsSheets: updated?.allowAgentReadDocsSheets ?? false,
       });
     } catch (err) {
       logger.error('settings.put.error', { userId: req.user?.id, error: err.message });

@@ -1,6 +1,6 @@
 import express from 'express';
 import { config } from '../config/index.js';
-import { isEmailConfigured, isCalendarConfigured, isTasksConfigured } from '../utils/googleAuth.js';
+import { isEmailConfigured, isCalendarConfigured, isTasksConfigured, isYouTubeConfigured, isDocsConfigured, isSheetsConfigured } from '../utils/googleAuth.js';
 
 export const healthRouter = () => {
   const router = express.Router();
@@ -20,10 +20,16 @@ export const healthRouter = () => {
         'tasksAssistant',
         'newsAssistant',
         'searchAssistant',
+        'youtubeAssistant',
+        'docsAssistant',
+        'sheetsAssistant',
       ],
       emailConfigured: isEmailConfigured(),
       calendarConfigured: isCalendarConfigured(),
       tasksConfigured: isTasksConfigured(),
+      youtubeConfigured: isYouTubeConfigured(),
+      docsConfigured: isDocsConfigured(),
+      sheetsConfigured: isSheetsConfigured(),
       openaiConfigured,
     });
   });

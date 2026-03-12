@@ -1,6 +1,6 @@
 # Frontend – AI Agent Hub (Vue 3 + Vite)
 
-This is the **chat UI** for the multi-agent orchestrator. It connects to the Node.js backend over **HTTP** and **WebSocket** to let you talk to the orchestrator and its sub‑agents (email, calendar, tasks, news, search, etc.).
+This is the **chat UI** for the multi-agent orchestrator. It connects to the Node.js backend over **HTTP** and **WebSocket** to let you talk to the orchestrator and its sub‑agents (email, calendar, tasks, **YouTube & music**, news, search, etc.). When the YouTube agent returns video results, the UI shows **video cards** and an **inline player** (modal with YouTube embed); if you asked to "play" a video or song, the first result **auto-opens and autoplays**.
 
 ## Prerequisites
 
@@ -64,7 +64,13 @@ src/
 ├── config/
 │   └── index.js            # NAV_ITEMS, VIEW_IDS, VIEW_LABELS, API_BASE, WS_URL (from env)
 ├── composables/
-│   └── useNavigation.js   # activeView, sidebarOpen, activeViewLabel, navItems, selectView
+│   ├── useNavigation.js   # activeView, sidebarOpen, activeViewLabel, navItems, selectView
+│   └── useWebSocketChat.js # connectWebSocket, sendMessage; handles trace/response/error, updates messages/sessionId/isLoading/error; onOpen, onClose, onResponse callbacks
+├── utils/
+│   ├── index.js            # Barrel: messageUtils, formatUtils, agentDisplay
+│   ├── messageUtils.js     # createMessage, mapDbMessageToUI, findLastMessageByRole, shouldAutoPlayFirst
+│   ├── formatUtils.js      # formatMessageTime, formatMarkdown (simple markdown → HTML)
+│   └── agentDisplay.js     # getAgentIcon (emoji by agent), getTraceIcon (emoji by trace step)
 ├── components/
 │   ├── layout/
 │   │   ├── index.js        # Barrel: AppHeader, SidebarMenu, StatusPill
@@ -78,9 +84,12 @@ src/
 │   │   ├── IconChat.vue    # Chat bubble SVG
 │   │   ├── IconIntegrations.vue
 │   │   └── IconSettings.vue
-│   ├── ChatInterface.vue   # Messages list, ChatInput, WebSocket, history drawer, login modal, error toast
+│   ├── ChatInterface.vue   # Messages list, ChatInput; uses useWebSocketChat, messageUtils (createMessage, mapDbMessageToUI); history drawer, login modal, error toast
 │   ├── ChatInput.vue       # Textarea + send; auto-resize
-│   ├── MessageBubble.vue   # Single message: agent badge, traces, markdown, latency, FeedbackControls
+│   ├── MessageBubble.vue   # Agent badge, ThinkingIndicator, content (formatMarkdown), YouTubeVideoList, ExecutionTrace, latency, FeedbackControls
+│   ├── ThinkingIndicator.vue # "Analyzing..." state with dot + thought/agent name (used while assistant is loading)
+│   ├── ExecutionTrace.vue  # Collapsible execution flow (trace steps with icons)
+│   ├── YouTubeVideoList.vue # Video cards grid + modal player (embed); autoPlayFirst to open and autoplay first video
 │   ├── EmptyState.vue      # Empty state with suggestion chips
 │   ├── FeedbackControls.vue # Thumbs up/down; on submit sends to POST /api/metrics/feedback (metrics recorded only when user gives feedback)
 │   ├── LoginModal.vue      # Sign-in prompt with Google login
@@ -105,7 +114,8 @@ src/
 ### Reuse
 
 - **Config** – Use `API_BASE`, `WS_URL`, `NAV_ITEMS`, `VIEW_LABELS` from `@/config` (or `./config/index.js`) instead of reading `import.meta.env` in multiple places.
-- **Composables** – `useNavigation()` provides view state and sidebar; use it in any shell or layout that switches views.
+- **Composables** – `useNavigation()` for view state and sidebar; `useWebSocketChat(messagesRef, sessionIdRef, isLoadingRef, errorRef, { onOpen, onClose, onResponse })` for WebSocket chat (connect, send, handle trace/response/error).
+- **Utils** – `messageUtils` (createMessage, mapDbMessageToUI, shouldAutoPlayFirst), `formatUtils` (formatMessageTime, formatMarkdown), `agentDisplay` (getAgentIcon, getTraceIcon). Import from `@/utils` or `../utils/index.js`.
 - **Layout** – `AppHeader`, `SidebarMenu`, and `StatusPill` are reusable; pass props and listen to emits.
 - **Services** – Import from `@/services/api.js` (barrel) or from `@/services/chat`, `@/services/auth`, etc. for smaller bundles and clearer dependencies.
 

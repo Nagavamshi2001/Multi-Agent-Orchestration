@@ -32,6 +32,16 @@ import {
   getNewsByLocation,
 } from './newsTools.js';
 import { webSearch } from './searchTools.js';
+import {
+  getMyChannel,
+  listMyPlaylists,
+  listPlaylistItems,
+  searchVideos,
+  searchMusic,
+  getVideoDetails,
+} from './youtubeTools.js';
+import { create_document, search_documents, get_document } from './docsTools.js';
+import { create_spreadsheet, search_spreadsheets, get_spreadsheet_data, update_spreadsheet_values } from './sheetsTools.js';
 
 /** @typedef {{ name: string, description: string, parameters: z.ZodType, execute: (params: any) => Promise<any> }} ToolDef */
 
@@ -254,6 +264,118 @@ export const searchToolDefs = [
   ),
 ];
 
+// ─── YouTube ──────────────────────────────────────────────────────────────────
+export const youtubeToolDefs = [
+  def('get_my_channel', 'Get the logged-in user\'s YouTube channel (title, stats).', z.object({}), getMyChannel),
+  def(
+    'list_my_playlists',
+    'List the user\'s YouTube playlists.',
+    z.object({ maxResults: z.number().int().min(1).max(50).optional().nullable() }),
+    listMyPlaylists
+  ),
+  def(
+    'list_playlist_items',
+    'List videos in a YouTube playlist.',
+    z.object({
+      playlistId: z.string(),
+      maxResults: z.number().int().min(1).max(50).optional().nullable(),
+    }),
+    listPlaylistItems
+  ),
+  def(
+    'search_videos',
+    'Search YouTube for videos by query.',
+    z.object({
+      query: z.string(),
+      maxResults: z.number().int().min(1).max(25).optional().nullable(),
+    }),
+    searchVideos
+  ),
+  def(
+    'search_music',
+    'Search for music/songs on YouTube (YouTube Music style). Use for play a song, find music, artist, album.',
+    z.object({
+      query: z.string(),
+      maxResults: z.number().int().min(1).max(25).optional().nullable(),
+    }),
+    searchMusic
+  ),
+  def(
+    'get_video_details',
+    'Get details of a YouTube video by ID.',
+    z.object({ videoId: z.string() }),
+    getVideoDetails
+  ),
+];
+
+// ─── Docs ────────────────────────────────────────────────────────────────────
+export const docsToolDefs = [
+  def(
+    'create_document',
+    'Create a new Google Doc with optional initial body text.',
+    z.object({
+      title: z.string(),
+      body: z.string().optional().nullable(),
+    }),
+    create_document
+  ),
+  def(
+    'search_documents',
+    'Search or list the user\'s Google Docs by optional name query.',
+    z.object({
+      query: z.string().optional().nullable(),
+      maxResults: z.number().int().min(1).max(50).optional().nullable(),
+    }),
+    search_documents
+  ),
+  def(
+    'get_document',
+    'Get a Google Doc\'s content by documentId (title and body text).',
+    z.object({ documentId: z.string() }),
+    get_document
+  ),
+];
+
+// ─── Sheets ───────────────────────────────────────────────────────────────────
+export const sheetsToolDefs = [
+  def(
+    'create_spreadsheet',
+    'Create a new Google Sheet with a title and optional sheet name.',
+    z.object({
+      title: z.string(),
+      sheetName: z.string().optional().nullable(),
+    }),
+    create_spreadsheet
+  ),
+  def(
+    'search_spreadsheets',
+    'Search or list the user\'s Google Sheets by optional name query.',
+    z.object({
+      query: z.string().optional().nullable(),
+      maxResults: z.number().int().min(1).max(50).optional().nullable(),
+    }),
+    search_spreadsheets
+  ),
+  def(
+    'get_spreadsheet_data',
+    'Get a Google Sheet link by spreadsheetId. Returns the spreadsheet title and URL so the user can open it; does not read cell data.',
+    z.object({
+      spreadsheetId: z.string(),
+    }),
+    get_spreadsheet_data
+  ),
+  def(
+    'update_spreadsheet_values',
+    'Write data into a Google Sheet. Provide spreadsheetId, the starting range (e.g. Sheet1!A1), and values as an array of rows (each row an array of cell values). Use after create_spreadsheet to add headers and data.',
+    z.object({
+      spreadsheetId: z.string(),
+      range: z.string(),
+      values: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))),
+    }),
+    update_spreadsheet_values
+  ),
+];
+
 /** All tool definitions for MCP server registration (name, description, inputSchema, handler). */
 export function getAllMcpToolDefs() {
   return [
@@ -262,5 +384,8 @@ export function getAllMcpToolDefs() {
     ...tasksToolDefs,
     ...newsToolDefs,
     ...searchToolDefs,
+    ...youtubeToolDefs,
+    ...docsToolDefs,
+    ...sheetsToolDefs,
   ];
 }
